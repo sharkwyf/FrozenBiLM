@@ -1,4 +1,5 @@
-clip==1.0
+# clip==1.0
+clip
 jsonlines==3.0.0
 numpy==1.21.6
 pandas==1.4.1
@@ -9,3 +10,4 @@ sentencepiece==0.1.96
 tokenizers==0.11.6
 tqdm==4.63.1
 transformers==4.17.0
+python-hostlist

@@ -3,7 +3,7 @@ import os
 
 PRESAVE_DIR = ""
 MODEL_DIR = ""
-DATA_DIR = ""
+DATA_DIR = "/FrozenBiLM/data"
 SSD_DIR = ""
 name2folder = {
     "webvid": "WebVid",
