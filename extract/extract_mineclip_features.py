@@ -148,7 +148,7 @@ def main():
     # mp_array = mp.Array("i", [0 for _ in range(cfg.world_size)])
     mp_lock = mp.Lock()
     args = get_args()
-    
+    print(args)
     if args.ceph:
         from petrel_client.client import Client
         client = Client()
