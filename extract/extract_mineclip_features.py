@@ -133,7 +133,14 @@ def run_extract_features(rank, world_size, args, contents, mp_lock):
             output_features[p] = [features, captions]
             with mp_lock:
                 pbar.update(1)
-        np.save(outputfile, output_features)
+        
+        rt = [None for _ in range(world_size)]
+        dist.gather_object(output_features, rt, dst=0)
+        for i in range(1, world_size):
+            output_features.update(rt[i])
+
+        if dist.is_main_process():
+            np.save(outputfile, output_features)
 
         print(f"Extraction completed, saved to {outputfile}")
 

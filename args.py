@@ -16,11 +16,18 @@ name2folder = {
     "how2qa": "How2QA",
     "tvqa": "TVQA",
     "vqa": "VQA",
+    "minedojo": "Minedojo"
 }
 
 
 def get_args_parser():
     parser = argparse.ArgumentParser("Set FrozenBiLM", add_help=False)
+    
+    # Minedojo
+    parser.add_argument(
+        "--minedojo_features_path",
+        default=os.path.join(DATA_DIR, name2folder["minedojo"], "mineclip_features.npy"),
+    )
 
     # Dataset specific
     parser.add_argument(

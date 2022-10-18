@@ -13,7 +13,7 @@ import argparse
 from torch.utils.data import DataLoader, DistributedSampler
 from collections import namedtuple
 
-from datasets import build_videotext_dataset, videotext_collate_fn
+from datasets import build_videotext_dataset, videotext_collate_fn, build_minedojo_videotext_dataset, minedojo_videotext_collate_fn
 from model import build_model, get_tokenizer
 from util.misc import get_mask, mask_tokens, adjust_learning_rate
 from util import dist
@@ -205,6 +205,22 @@ def main(args):
                 collate_fn=videotext_collate_fn,
                 num_workers=args.num_workers,
             )
+        elif "minedojo" in args.combine_datasets:
+            dataset_train = build_minedojo_videotext_dataset("train", args)
+            sampler_train = (
+                DistributedSampler(dataset_train)
+                if args.distributed
+                else torch.utils.data.RandomSampler(dataset_train)
+            )
+            batch_sampler_train = torch.utils.data.BatchSampler(
+                sampler_train, args.batch_size, drop_last=True
+            )
+            dataloader_train = DataLoader(
+                dataset_train,
+                batch_sampler=batch_sampler_train,
+                collate_fn=minedojo_videotext_collate_fn,
+                num_workers=args.num_workers,
+            )
         else:
             raise NotImplementedError
 
@@ -229,6 +245,21 @@ def main(args):
             num_workers=args.num_workers,
         )
         tuples.append(nt(dataset_name="webvid", dataloader=webvid_dataloader_val))
+    elif "minedojo" in args.combine_datasets_val:
+        minedojo_dataset_val = build_minedojo_videotext_dataset("val", args)
+        minedojo_sampler_val = (
+            DistributedSampler(minedojo_dataset_val, shuffle=False)
+            if args.distributed
+            else torch.utils.data.SequentialSampler(minedojo_dataset_val)
+        )
+        minedojo_dataloader_val = DataLoader(
+            minedojo_dataset_val,
+            batch_size=args.batch_size_val,
+            sampler=minedojo_sampler_val,
+            collate_fn=minedojo_videotext_collate_fn,
+            num_workers=args.num_workers,
+        )
+        tuples.append(nt(dataset_name="minedojo", dataloader=minedojo_dataloader_val))
     else:
         raise NotImplementedError
 
