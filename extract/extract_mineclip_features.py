@@ -96,7 +96,7 @@ def run_extract_features(rank, world_size, args, clips, mp_lock):
     model.load_ckpt(args.model_path, strict=True)
 
     client = Client()
-    pbar = tqdm(total=sum([len(clips[keyword]) for keyword in args.keywords]))
+    pbar = tqdm(total=sum([len(clips[keyword][rank::world_size]) for keyword in args.keywords]))
     with torch.no_grad():
         output_features = {}
         for keyword in args.keywords:
@@ -149,11 +149,13 @@ def main(args):
     client = Client()
     if len(args.keywords) == 0:
         args.keywords = [x[:-1] for x in list(client.list(f"{args.cluster}:{args.trans}"))]
+    print("keywords: ", args.keywords)
     clips = {
         keyword: [
             x[:-4] for x in list(client.list(f"{args.cluster}:{args.trans}{keyword}/")) if x.endswith(".npy")
         ] for keyword in args.keywords
     }
+    print("total clips:", sum([len(v)for v in clips.values()]))
     mp.spawn(run_extract_features,
         args=(args.world_size, args, clips, mp_lock),
         nprocs=args.world_size,
