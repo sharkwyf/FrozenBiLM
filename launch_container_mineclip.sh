@@ -7,9 +7,7 @@ docker run --gpus all --ipc=host --rm -itd \
     bash -c "unset HTTP_PROXY; unset HTTPS_PROXY; bash" 
 
 
-    # "
     # unset HTTP_PROXY
     # unset HTTPS_PROXY
     # cd /FrozenBiLM/extract
     # python extract_mineclip_features.py --world_size=8
-    # "
