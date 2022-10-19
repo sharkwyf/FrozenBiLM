@@ -7,8 +7,11 @@ import os
 
 class Minedojo_VideoText_Dataset(Dataset):
     def __init__(self, features_path, max_feats=10, features_dim=768):
-        self.data = np.load(features_path, allow_pickle=True).item()
-        self.keys = list(self.data.keys())
+        features = np.load(features_path, allow_pickle=True).item()
+        self.keywords = list(features.keys())
+        self.data = []
+        for keyword in self.keywords:
+            self.data.extend(list(features[keyword].values()))
         self.max_feats = max_feats
         self.features_dim = features_dim
 
@@ -16,7 +19,7 @@ class Minedojo_VideoText_Dataset(Dataset):
         return len(self.data)
 
     def __getitem__(self, idx):
-        frames, captions = self.data[self.keys[idx]]
+        frames, captions = self.data[idx]
         text = captions["word"]
         text = " ".join(text)
 
