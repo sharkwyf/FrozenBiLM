@@ -206,7 +206,7 @@ def main(args):
                 num_workers=args.num_workers,
             )
         elif "minedojo" in args.combine_datasets:
-            dataset_train = build_minedojo_videotext_dataset("train", args)
+            dataset_train, minedojo_dataset_val = build_minedojo_videotext_dataset(args)
             sampler_train = (
                 DistributedSampler(dataset_train)
                 if args.distributed
@@ -246,7 +246,7 @@ def main(args):
         )
         tuples.append(nt(dataset_name="webvid", dataloader=webvid_dataloader_val))
     elif "minedojo" in args.combine_datasets_val:
-        minedojo_dataset_val = build_minedojo_videotext_dataset("val", args)
+        # minedojo_dataset_val = build_minedojo_videotext_dataset("val", args)
         minedojo_sampler_val = (
             DistributedSampler(minedojo_dataset_val, shuffle=False)
             if args.distributed

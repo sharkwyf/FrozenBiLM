@@ -94,6 +94,7 @@ def run_extract_features(rank, world_size, args, clips, mp_lock):
     }
     model = MineCLIP(**clip_param).to(device)
     model.load_ckpt(args.model_path, strict=True)
+    model.clip_model.vision_model.projection = None
 
     client = Client()
     pbar = tqdm(total=sum([len(clips[keyword][rank::world_size]) for keyword in args.keywords]))

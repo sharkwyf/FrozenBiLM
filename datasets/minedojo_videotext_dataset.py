@@ -1,5 +1,5 @@
 import torch as th
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, random_split
 import pandas as pd
 import numpy as np
 import os
@@ -58,15 +58,13 @@ def minedojo_videotext_collate_fn(batch):
     }
 
 
-def build_minedojo_videotext_dataset(split, args):
-    # if split == "train":
-    #     csv_path = args.minedojo_train_csv_path
-    # elif split == "val":
-    #     csv_path = args.minedojo_val_csv_path
-    # else:
-    #     raise NotImplementedError
-    return Minedojo_VideoText_Dataset(
+def build_minedojo_videotext_dataset(args):
+    full_dataset = Minedojo_VideoText_Dataset(
         features_path=args.minedojo_features_path,
         max_feats=args.max_feats,
         features_dim=args.features_dim,
     )
+    train_size = int(len(full_dataset) * 0.9)
+    test_size = len(full_dataset) - train_size
+    train_dataset, test_dataset = random_split(full_dataset, [train_size, test_size], generator=th.Generator().manual_seed(42))
+    return train_dataset, test_dataset
