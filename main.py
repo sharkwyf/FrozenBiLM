@@ -42,19 +42,42 @@ def train_one_epoch(
         video = batch_dict["video"].to(device)
         video_len = batch_dict["video_len"]
         video_mask = get_mask(video_len, video.size(1)).to(device)
-        text = batch_dict["text"]
-        encoded = tokenizer(
-            text,
-            add_special_tokens=True,
-            max_length=args.max_tokens,
-            padding="longest",
-            truncation=True,
-            return_tensors="pt",
-        )
-        inputs, labels = mask_tokens(
-            encoded["input_ids"], tokenizer, mlm_probability=args.mlm_prob
-        )
-        inputs, labels = inputs.to(device), labels.to(device)
+        if args.minedojo_mask_probs:
+            pre_text = batch_dict["pre_text"]
+            in_text = batch_dict["in_text"]
+            post_text = batch_dict["post_text"]
+            encodeds = [
+                tokenizer(
+                    _text,
+                    add_special_tokens=True,
+                    max_length=args.max_tokens,
+                    padding="longest",
+                    truncation=True,
+                    return_tensors="pt",
+                ) for _text in [pre_text, in_text, post_text]
+            ]
+            (pre_inputs, pre_labels), (in_inputs, in_labels), (post_inputs, post_labels) = list(map(
+                lambda x: mask_tokens(
+                    x[0]["input_ids"], tokenizer, mlm_probability=x[1]
+                ),
+                list(zip(encodeds, args.minedojo_mask_probs)),
+            ))
+            encoded = encodeds[1]
+            inputs, labels = in_inputs.to(device), in_labels.to(device)
+        else:
+            text = batch_dict["text"]
+            encoded = tokenizer(
+                text,
+                add_special_tokens=True,
+                max_length=args.max_tokens,
+                padding="longest",
+                truncation=True,
+                return_tensors="pt",
+            )
+            inputs, labels = mask_tokens(
+                encoded["input_ids"], tokenizer, mlm_probability=args.mlm_prob
+            )
+            inputs, labels = inputs.to(device), labels.to(device)
 
         # forward
         output = model(
@@ -115,19 +138,42 @@ def evaluate(
         video = batch_dict["video"].to(device)
         video_len = batch_dict["video_len"]
         video_mask = get_mask(video_len, video.size(1)).to(device)
-        text = batch_dict["text"]
-        encoded = tokenizer(
-            text,
-            add_special_tokens=True,
-            max_length=args.max_tokens,
-            padding="longest",
-            truncation=True,
-            return_tensors="pt",
-        )
-        inputs, labels = mask_tokens(
-            encoded["input_ids"], tokenizer, mlm_probability=args.mlm_prob
-        )
-        inputs, labels = inputs.to(device), labels.to(device)
+        if args.minedojo_mask_probs:
+            pre_text = batch_dict["pre_text"]
+            in_text = batch_dict["in_text"]
+            post_text = batch_dict["post_text"]
+            encodeds = [
+                tokenizer(
+                    _text,
+                    add_special_tokens=True,
+                    max_length=args.max_tokens,
+                    padding="longest",
+                    truncation=True,
+                    return_tensors="pt",
+                ) for _text in [pre_text, in_text, post_text]
+            ]
+            (pre_inputs, pre_labels), (in_inputs, in_labels), (post_inputs, post_labels) = list(map(
+                lambda x: mask_tokens(
+                    x[0]["input_ids"], tokenizer, mlm_probability=x[1]
+                ),
+                list(zip(encodeds, args.minedojo_mask_probs)),
+            ))
+            encoded = encodeds[1]
+            inputs, labels = in_inputs.to(device), in_labels.to(device)
+        else:
+            text = batch_dict["text"]
+            encoded = tokenizer(
+                text,
+                add_special_tokens=True,
+                max_length=args.max_tokens,
+                padding="longest",
+                truncation=True,
+                return_tensors="pt",
+            )
+            inputs, labels = mask_tokens(
+                encoded["input_ids"], tokenizer, mlm_probability=args.mlm_prob
+            )
+            inputs, labels = inputs.to(device), labels.to(device)
 
         # forward
         output = model(
@@ -189,23 +235,7 @@ def main(args):
 
     # Set up dataloaders
     if not args.eval:
-        if "webvid" in args.combine_datasets:
-            dataset_train = build_videotext_dataset("train", args)
-            sampler_train = (
-                DistributedSampler(dataset_train)
-                if args.distributed
-                else torch.utils.data.RandomSampler(dataset_train)
-            )
-            batch_sampler_train = torch.utils.data.BatchSampler(
-                sampler_train, args.batch_size, drop_last=True
-            )
-            dataloader_train = DataLoader(
-                dataset_train,
-                batch_sampler=batch_sampler_train,
-                collate_fn=videotext_collate_fn,
-                num_workers=args.num_workers,
-            )
-        elif "minedojo" in args.combine_datasets:
+        if "minedojo" in args.combine_datasets:
             dataset_train, minedojo_dataset_val = build_minedojo_videotext_dataset(args)
             sampler_train = (
                 DistributedSampler(dataset_train)
@@ -221,6 +251,22 @@ def main(args):
                 collate_fn=minedojo_videotext_collate_fn,
                 num_workers=args.num_workers,
             )
+        elif "webvid" in args.combine_datasets:
+            dataset_train = build_videotext_dataset("train", args)
+            sampler_train = (
+                DistributedSampler(dataset_train)
+                if args.distributed
+                else torch.utils.data.RandomSampler(dataset_train)
+            )
+            batch_sampler_train = torch.utils.data.BatchSampler(
+                sampler_train, args.batch_size, drop_last=True
+            )
+            dataloader_train = DataLoader(
+                dataset_train,
+                batch_sampler=batch_sampler_train,
+                collate_fn=videotext_collate_fn,
+                num_workers=args.num_workers,
+            )
         else:
             raise NotImplementedError
 
@@ -230,22 +276,7 @@ def main(args):
     )
 
     tuples = []
-    if "webvid" in args.combine_datasets_val:
-        webvid_dataset_val = build_videotext_dataset("val", args)
-        webvid_sampler_val = (
-            DistributedSampler(webvid_dataset_val, shuffle=False)
-            if args.distributed
-            else torch.utils.data.SequentialSampler(webvid_dataset_val)
-        )
-        webvid_dataloader_val = DataLoader(
-            webvid_dataset_val,
-            batch_size=args.batch_size_val,
-            sampler=webvid_sampler_val,
-            collate_fn=videotext_collate_fn,
-            num_workers=args.num_workers,
-        )
-        tuples.append(nt(dataset_name="webvid", dataloader=webvid_dataloader_val))
-    elif "minedojo" in args.combine_datasets_val:
+    if "minedojo" in args.combine_datasets_val:
         # minedojo_dataset_val = build_minedojo_videotext_dataset("val", args)
         minedojo_sampler_val = (
             DistributedSampler(minedojo_dataset_val, shuffle=False)
@@ -260,6 +291,21 @@ def main(args):
             num_workers=args.num_workers,
         )
         tuples.append(nt(dataset_name="minedojo", dataloader=minedojo_dataloader_val))
+    elif "webvid" in args.combine_datasets_val:
+        webvid_dataset_val = build_videotext_dataset("val", args)
+        webvid_sampler_val = (
+            DistributedSampler(webvid_dataset_val, shuffle=False)
+            if args.distributed
+            else torch.utils.data.SequentialSampler(webvid_dataset_val)
+        )
+        webvid_dataloader_val = DataLoader(
+            webvid_dataset_val,
+            batch_size=args.batch_size_val,
+            sampler=webvid_sampler_val,
+            collate_fn=videotext_collate_fn,
+            num_workers=args.num_workers,
+        )
+        tuples.append(nt(dataset_name="webvid", dataloader=webvid_dataloader_val))
     else:
         raise NotImplementedError
 

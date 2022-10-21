@@ -11,6 +11,9 @@ import torch.multiprocessing as mp
 from torch.nn.parallel import DistributedDataParallel as DDP
 from tqdm import tqdm
 import argparse
+import sys
+workdir = os.path.join(os.path.dirname(__file__), '..')
+sys.path.insert(0, workdir)
 from model.mineclip import MineCLIP
 from petrel_client.client import Client
 
@@ -81,8 +84,6 @@ def run_extract_features(rank, world_size, args, clips, mp_lock):
     dist.init_process_group("nccl", init_method="env://", rank=rank, world_size=world_size)
     torch.cuda.set_device(rank)
     device = torch.device("cuda", rank) if torch.cuda.is_available() else "cpu"
-    
-    # output_path = os.path.join(os.path.dirname(__file__), args.output_path)
 
     clip_param = {
         "arch": "vit_base_p16_fz.v2.t2",
@@ -106,8 +107,8 @@ def run_extract_features(rank, world_size, args, clips, mp_lock):
                 # Extract video features
                 stream = BytesIO(client.get(f"{args.trans}{keyword}/{p}.npy"))   # enable_stream=True for large data
                 frames = np.load(stream, encoding="bytes")
-                # 64, H, W, C -> 16, C, H, W
-                frames = torch.tensor(frames[::4].transpose(0, 3, 1, 2), dtype=float, device=device)
+                # 64, H, W, C -> 64, C, H, W
+                frames = torch.tensor(frames[::].transpose(0, 3, 1, 2), dtype=float, device=device)
                 frames = resize_frames(frames, clip_param["resolution"])
                 frames = torch_normalize(frames / 255.0, mean=MC_IMAGE_MEAN, std=MC_IMAGE_STD)
                 features = model.forward_image_features(frames).cpu().numpy()
@@ -123,15 +124,17 @@ def run_extract_features(rank, world_size, args, clips, mp_lock):
                     print(err)
                 splits = [x for x in splits if len(x) == 3]
                 captions = {
-                    "start": np.array([x[0]for x in splits]),
-                    "end": np.array([x[1]for x in splits]),
+                    "start": np.array([float(x[0])for x in splits], dtype=np.float16),
+                    "end": np.array([float(x[1])for x in splits], dtype=np.float16),
                     "word": np.array([x[2]for x in splits]),
                 }
 
                 output_features[keyword][p] = [features, captions]
                 pbar.update(1)
+                # break
         
         # Gather features and save to npy
+        print(dist.get_rank(), output_features)
         if dist.get_rank() == 0:
             rt = [None for _ in range(dist.get_world_size())]
             dist.gather_object(output_features, rt, dst=0)
@@ -165,8 +168,8 @@ def main(args):
 if __name__ == "__main__":
     # os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
     os.environ["CUDA_LAUNCH_BLOCKING"] = '1'
-    os.environ["MASTER_ADDR"] = "localhost"
-    os.environ["MASTER_PORT"] = str(49500)
+    os.environ["MASTER_ADDR"] = "127.0.0.1"
+    os.environ["MASTER_PORT"] = str(49505)
     mp.set_start_method('spawn', force = True)
     args = get_args()
     print(args)

@@ -28,6 +28,26 @@ def get_args_parser():
         "--minedojo_features_path",
         default=os.path.join(DATA_DIR, name2folder["minedojo"], "mineclip_features.npy"),
     )
+    parser.add_argument(
+        "--minedojo_text_start",
+        type=float,
+    )
+    parser.add_argument(
+        "--minedojo_text_end",
+        type=float,
+    )
+    parser.add_argument(
+        "--minedojo_mask_probs",
+        nargs="+",
+        default=None,
+        type=float,
+    )
+    parser.add_argument(
+        "--minedojo_loss_weights",
+        nargs="+",
+        default=None,
+        type=float,
+    )
 
     # Dataset specific
     parser.add_argument(

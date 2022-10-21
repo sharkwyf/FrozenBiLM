@@ -25,7 +25,7 @@ from util.metrics import MetricLogger
 from args import get_args_parser
 from model.mineclip import MineCLIP, utils as U
 from util.misc import get_mask, mask_tokens, adjust_learning_rate
-
+from util.verb_noun import VERB_NOUN_PAIRS, VERB_PHASE, ALL_WORDS
 
 
 MC_IMAGE_MEAN = (0.3331, 0.3245, 0.3051)
@@ -100,6 +100,12 @@ def main(args):
     model.to(device)
     tokenizer = get_tokenizer(args)
 
+    # encoded available words
+    answer_id = tokenizer.encode(["▁" + w for w in list(ALL_WORDS)])[1:-1]
+    answer_bias = torch.zeros(tokenizer.vocab_size, dtype=torch.float32, device=device)
+    for id in answer_id:
+        answer_bias[id] = args.answer_bias_weight
+
     # Load pretrained checkpoint
     if args.load:
         print("loading from", args.load)
@@ -121,7 +127,7 @@ def main(args):
     frames = np.stack(frames)
     cap.release()
 
-    result = cv2.VideoWriter(f"{args.output_dir}{Path(args.video_path).stem}_{Path(args.load).stem}.avi",
+    result = cv2.VideoWriter(f"{args.output_dir}{Path(args.video_path).stem}_{Path(args.load).stem}_w{args.answer_bias_weight}.avi",
         cv2.VideoWriter_fourcc(*'MJPG'),
         frame_rate, size)
     font = cv2.FONT_HERSHEY_SIMPLEX
@@ -135,7 +141,10 @@ def main(args):
     features = clip_model.forward_image_features(t_frames[::frame_rate]).unsqueeze(0)
     print("len of features: ", features.shape)
 
-    texts = ["I was [MASK] [MASK]", "To craft a stone pickaxe, now I need to [MASK] [MASK] [MASK] [MASK]"]
+    texts = [
+        "I was [MASK] [MASK] [MASK] [MASK] [MASK] [MASK]",
+        "To build a house, now I need to [MASK] [MASK] [MASK] [MASK] [MASK] [MASK]"
+    ]
     rt = [t for t in texts]
     for i in range(len(frames)):
         if (i - args.max_feats * frame_rate) >= 0 and (i - args.max_feats * frame_rate) % (args.sample_interval * frame_rate) == 0:
@@ -154,7 +163,7 @@ def main(args):
             for num, encoded in enumerate(rt):
                 while True:
                     input_ids = encoded["input_ids"].to(device)
-                    indices = ((input_ids[0] == 128000) * torch.arange(input_ids.shape[1])).nonzero()
+                    indices = ((input_ids[0] == tokenizer.mask_token_id) * torch.arange(input_ids.shape[1], device=device)).nonzero()
                     if len(indices) == 0:
                         break
                     min_idx = indices[0]
@@ -166,9 +175,12 @@ def main(args):
                         input_ids=input_ids,
                         attention_mask=encoded["attention_mask"].to(device),
                     )
-                    encoded_output = output.logits[:, video_len:].argmax(dim=2)
+                    logits = output.logits[:,video_len:,:len(answer_bias)] + answer_bias
+                    encoded_output = logits.argmax(dim=2)
                     input_ids[0][min_idx] = encoded_output[0][min_idx]
-                rt[num] = tokenizer.batch_decode(encoded_output[:, 1:-1])[0]
+                    print(min_idx, input_ids)
+                rt[num] = tokenizer.batch_decode(input_ids[:, 1:-1])[0]
+            print(rt)
                 
         for j, text in enumerate(rt):
             cv2.putText(frames[i], 
@@ -192,6 +204,7 @@ if __name__ == "__main__":
     parser.add_argument("--video_path", default="./data/Minedojo/demo.mp4", type=str)
     parser.add_argument("--output_dir", default="./data/Minedojo/", type=str)
     parser.add_argument("--model_path", default="./data/Minedojo/attn.pth", type=str)
+    parser.add_argument("--answer_bias_weight", default=100, type=float)
     parser.add_argument("--sample_interval", default=5, type=int)
     parser.add_argument("--half_precision", type=bool, default=True, help="whether to output half precision float or not")
     args = parser.parse_args()
