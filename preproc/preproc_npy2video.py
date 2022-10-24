@@ -16,6 +16,7 @@ import multiprocessing
 from multiprocessing import Process, Lock, Queue, Pool
 from tqdm import *
 from petrel_client.client import Client
+from pathlib import Path
 
 
 """
@@ -195,33 +196,55 @@ def preprocess_minedojo_videotext_data(args):
         data_save(args.output_path + '/' + keyword + '/' + data_name + '_' + str(i), data_video, data_txt)
     return len(video)
 
+import glob
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='')
-    parser.add_argument('--video_index_file', type=str, default='./data/Minedojo/minedojo_clips.json')
-    parser.add_argument('--output_path', type=str, default='trans/v2')
-    parser.add_argument('--left', type=int, default=0)
-    parser.add_argument('--right', type=int, default=math.inf)
-    parser.add_argument('--key_word_order', type=int, default=0)
-    parser.add_argument('--before_time', type=int, default=32)
-    parser.add_argument('--half_video_time', type=int, default=8)
-    parser.add_argument('--past_time', type=int, default=16)
-    parser.add_argument('--n_frames', type=int, default=64)
-    parser.add_argument('--n_process', type=int, default=16)
-    args = parser.parse_args()
-    print(args)
-    print(f"total cpu counts: {multiprocessing.cpu_count()}")
+    path = "/mnt/nfs/wangyuanfu/testdata/*/*.npy"
+    out_path = "/mnt/nfs/wangyuanfu/testdata/test/"
+    for name in glob.glob(path):
+        print(name)
+        # load text
+        txt_path = name[:-4] + ".txt"
+        if os.path.exists(txt_path):
+            with open(txt_path) as f:
+                text = f.read()
+                splits = [item.split("|") for item in text.replace(" ", "").split("\n")]
+                err = [x for x in splits[:-1] if len(x) != 3]
+                if len(err) > 0:
+                    print(err)
+                splits = [x for x in splits if len(x) == 3]
+                captions = {
+                    "start": np.array([float(x[0])for x in splits], dtype=np.float16),
+                    "end": np.array([float(x[1])for x in splits], dtype=np.float16),
+                    "word": np.array([x[2]for x in splits]),
+                }
+                masked = (captions["start"] >= -8) & (captions["start"] <= 8)
+                text = " ".join(captions["word"][masked])
+        else:
+            continue
 
-    video_indices = load_video_index(video_index_file=args.video_index_file, key_word_order=args.key_word_order)
-    video_indices = sorted(video_indices.items(), key=lambda d: d[1], reverse=True)
+        # load video
+        frames = np.load(name)
+        result = cv2.VideoWriter(f"{name[:-4]}.avi",
+            cv2.VideoWriter_fourcc(*'MJPG'),
+            4, frames.shape[1:3][::-1])
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        for frame in frames:
+            for i in range(len(text) // 40):
+                cv2.putText(frame, 
+                    "{}".format(text[i * 40 : (i + 1) * 40]), 
+                    (50, 50 + 30 * i), 
+                    font, 0.6, 
+                    (0, 255, 255), 
+                    2, 
+                    cv2.LINE_4)
+            result.write(frame)
+                
+        # release the cap object
+        result.release()
+        # close all windows
+        cv2.destroyAllWindows()
 
-    inputs = [(args, video_index) for video_index in video_indices]
-    with Pool(processes=args.n_process) as pool:
-        results = list(tqdm(
-            pool.imap_unordered(
-                preprocess_minedojo_videotext_data,
-                inputs,
-            ),
-            total=len(inputs)
-        ))
-    print("total processed video clips", sum(results))
+        
+
+        print("Succeed")

@@ -15,6 +15,7 @@ import sys
 workdir = os.path.join(os.path.dirname(__file__), '..')
 sys.path.insert(0, workdir)
 from model.mineclip import MineCLIP
+from util.pertrel_oss_helper import load_npy, load_txt
 from petrel_client.client import Client
 
 
@@ -105,8 +106,9 @@ def run_extract_features(rank, world_size, args, clips, mp_lock):
             output_features[keyword] = {}
             for i, p in enumerate(clips[keyword][rank::world_size]):
                 # Extract video features
-                stream = BytesIO(client.get(f"{args.trans}{keyword}/{p}.npy"))   # enable_stream=True for large data
-                frames = np.load(stream, encoding="bytes")
+                frames = load_npy(client, f"{args.trans}{keyword}/{p}.npy")
+                # stream = BytesIO(client.get(f"{args.trans}{keyword}/{p}.npy"))   # enable_stream=True for large data
+                # frames = np.load(stream, encoding="bytes")
                 # 64, H, W, C -> 64, C, H, W
                 frames = torch.tensor(frames[::].transpose(0, 3, 1, 2), dtype=float, device=device)
                 frames = resize_frames(frames, clip_param["resolution"])
@@ -116,8 +118,7 @@ def run_extract_features(rank, world_size, args, clips, mp_lock):
                     features = features.astype("float16")
 
                 # Extract captions
-                stream = BytesIO(client.get(f"{args.trans}{keyword}/{p}.txt"))  # enable_stream=True for large data
-                text = stream.read().decode("utf-8")
+                text = load_npy(client, f"{args.trans}{keyword}/{p}.txt")
                 splits = [item.split("|") for item in text.replace(" ", "").split("\n")]
                 err = [x for x in splits[:-1] if len(x) != 3]
                 if len(err) > 0:
