@@ -18,7 +18,7 @@ from util.pertrel_oss_helper import init_clients
 Transfer video frames into Vit features
 then, split captions into past, current, future sentences
 """
-def init_clip_models(n_process, n_gpu):
+def init_clip_models(args, rank, n_gpu):
     """return n_process clip models evenly distributed on n_gpu gpus"""
     clip_param = {
         "arch": "vit_base_p16_fz.v2.t2",
@@ -28,54 +28,71 @@ def init_clip_models(n_process, n_gpu):
         "pool_type": "attn.d2.nh8.glusw",
         "resolution": [160, 256],
     }
-    models = []
-    for rank in range(n_process):
-        device = torch.device("cuda", rank % n_gpu) if n_gpu > 0 else "cpu"
-        model = MineCLIP(**clip_param).to(device)
-        model.load_ckpt(args.model_path, strict=True)
-        model.clip_model.vision_model.projection = None
-        model.eval()
-        models.append(model)
-    for model in models:
-        print(next(model.parameters()).device)
-    return models
+    device = torch.device("cuda", rank % n_gpu) if n_gpu > 0 else "cpu"
+    model = MineCLIP(**clip_param).to(device)
+    model.load_ckpt(args.model_path, strict=True)
+    model.clip_model.vision_model.projection = None
+    model.eval()
+    print(next(model.parameters()).device)
+    return model
+
+
+def producer(args, queue1, lock, names):
+    """Fetch video clips and captions"""
+    client = init_clients(1)[0]
+    for name in names:
+        try:
+            # Load video features
+            frames = client.load_nbz(f"{args.input_path}{name}.nbz")
+
+            # Load captions
+            text = client.load_txt(f"{args.input_path}{name}.txt")
+            splits = [item.split("|") for item in text.replace(" ", "").split("\n")]
+            splits = [x for x in splits if len(x) == 3]
+
+            queue1.put([name, frames, splits])
+        except Exception:
+            print(traceback.format_exc())
+            print(sys.exc_info()[2])
+
 
 @torch.no_grad()
-def run_extract_features(input):
-    try:
-        args, name, clients, models = input
-        rank = mp.current_process()._identity[0] - 1
-        client = clients[rank]
-        model = models[rank]
-        device = torch.device("cuda", rank % args.n_gpu) if args.n_gpu > 0 else "cpu"
+def consumer1(args, queue1, queue2, lock, rank):
+    """Extract features using ViT"""
+    device = torch.device("cuda", rank % args.n_gpu) if args.n_gpu > 0 else "cpu"
+    model = init_clip_models(args, rank, args.n_gpu)
+    while True:
+        try:
+            [name, frames, splits] = queue1.get()
+            # 64, H, W, C -> 64, C, H, W
+            frames = U.any_to_torch_tensor(frames.transpose(0, 3, 1, 2), dtype=torch.uint8, device=device)
+            image_feats = model.forward_image_features(frames).cpu().numpy()
+            if args.half_precision:
+                image_feats = image_feats.astype("float16")
 
-        # Extract video features
-        frames = client.load_nbz(f"{args.input_path}{name}.nbz")
-        # 64, H, W, C -> 64, C, H, W
-        frames = U.any_to_torch_tensor(frames.transpose(0, 3, 1, 2), dtype=torch.uint8, device=device)
-        image_feats = model.forward_image_features(frames).cpu().numpy()
-        if args.half_precision:
-            image_feats = image_feats.astype("float16")
+            output = {
+                "feats": image_feats,
+                "words": np.array([x[2]for x in splits]),
+                "starts": np.array([float(x[0])for x in splits], dtype=np.float16),
+                "lens": np.array([float(x[1])for x in splits], dtype=np.float16),
+            }
 
-        # Extract captions
-        text = client.load_txt(f"{args.input_path}{name}.txt")
-        splits = [item.split("|") for item in text.replace(" ", "").split("\n")]
-        err = [x for x in splits[:-1] if len(x) != 3]
-        if len(err) > 0:
-            print(err)
-        splits = [x for x in splits if len(x) == 3]
-        output = {
-            "feats": image_feats,
-            "words": np.array([x[2]for x in splits]),
-            "starts": np.array([float(x[0])for x in splits], dtype=np.float16),
-            "lens": np.array([float(x[1])for x in splits], dtype=np.float16),
-        }
-        client.save_npz(f"{args.output_path}{name}.npz", output)
-    except Exception:
-        print(traceback.format_exc())
-        print(sys.exc_info()[2])
-        return 0
-    return 1
+            queue2.put([name, output])
+        except Exception:
+            print(traceback.format_exc())
+            print(sys.exc_info()[2])
+
+def consumer2(args, queue2, done, lock):
+    """Save feats and words to Ceph"""
+    client = init_clients(1)[0]
+    while True:
+        try:
+            [name, output] = queue2.get()
+            client.save_npz(f"{args.output_path}{name}.npz", output)
+            done.put(1)
+        except Exception:
+            print(traceback.format_exc())
+            print(sys.exc_info()[2])
 
 
 if __name__ == "__main__":
@@ -88,16 +105,16 @@ if __name__ == "__main__":
     parser.add_argument("--input_path", default="s3://minedojo/trans/v1/", type=str)
     parser.add_argument("--output_path", default="s3://minedojo/feats/v1/", type=str)
     parser.add_argument("--model_path", default="./data/Minedojo/attn.pth", type=str)
-    parser.add_argument("--n_process", default=1, type=int)
+    parser.add_argument("--n_producer1", default=1, type=int)
+    parser.add_argument("--n_consumer1", default=1, type=int)
+    parser.add_argument("--n_consumer2", default=1, type=int)
     parser.add_argument("--n_gpu", default=torch.cuda.device_count(), type=int)
     parser.add_argument("--half_precision", type=bool, default=True, help="whether to output half precision float or not")
     args = parser.parse_args()
     print(args)
 
-    clients = init_clients(args.n_process)
-    models = init_clip_models(args.n_process, args.n_gpu)
-
     # load clip indices & models
+    clients = init_clients(1)
     print("fetching nbz indices")
     files = set(clients[0].list(args.input_path))
     # files = set(["-7OrkmVmS38_199.09.nbz", "-7OrkmVmS38_199.09.txt", "-7NkbSPZMLY_872.14.nbz", "-7NkbSPZMLY_872.14.txt"])
@@ -114,15 +131,42 @@ if __name__ == "__main__":
         if not file.endswith(".nbz"):
             continue
         if f"{file[:-4]}.txt" in files and file[:-4] not in downloaded_indices:
-            indices.append([args, file[:-4], clients, models])
+            indices.append([args, file[:-4]])
     print(f"total clips to extract: {len(indices)}")
-    with Pool(processes=args.n_process) as pool:
-        results = list(tqdm(
-            pool.imap_unordered(
-                run_extract_features,
-                indices,
-            ),
-            total=len(indices)
-        ))
-    print("total processed video clips", sum(results))
+
+    pbar = tqdm(total=len(indices))
+    lock = Lock()
+    queue1, queue2, done = Queue(1024), Queue(1024), Queue(1024)
+    producers, consumer1s, consumer2s = [], [], []
+    for n in range(args.n_producer1):
+        producers.append(Process(target=producer, args=(args, queue1, lock, [x[1] for x in indices[n::args.n_producer1]])))
+    for n in range(args.n_consumer1):
+        p = Process(target=consumer1, args=(args, queue1, queue2, lock, n))
+        p.daemon = True
+        consumer1s.append(p)
+    for n in range(args.n_consumer2):
+        p = Process(target=consumer2, args=(args, queue2, done, lock))
+        p.daemon = True
+        consumer2s.append(p)
+
+    for p in producers:
+        p.start()
+    for c in consumer1s:
+        c.start()
+    for c in consumer2s:
+        c.start()
+
+    step = 0
+    while True:
+        n = done.get()
+        pbar.update(n)
+        step += 1
+        if step == len(indices):
+            break
+
+    for p in producers:
+        p.join()
+
+    print("Finished")
+
 
