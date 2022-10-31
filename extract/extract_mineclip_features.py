@@ -2,90 +2,24 @@
 
 import torch
 import os
-import numpy as np
-from io import StringIO, BytesIO
-import kornia
-import torch.nn.functional as F
-import torch.distributed as dist
-import torch.multiprocessing as mp
-from torch.nn.parallel import DistributedDataParallel as DDP
-from tqdm import tqdm
-import argparse
 import sys
+import traceback
+import numpy as np
+import argparse
+import torch.multiprocessing as mp
+from torch.multiprocessing import Process, Lock, Queue, Pool
+from tqdm import tqdm
 workdir = os.path.join(os.path.dirname(__file__), '..')
 sys.path.insert(0, workdir)
-from model.mineclip import MineCLIP
-from util.pertrel_oss_helper import load_npy, load_txt
-from petrel_client.client import Client
-
-
-MC_IMAGE_MEAN = (0.3331, 0.3245, 0.3051)
-MC_IMAGE_STD = (0.2439, 0.2493, 0.2873)
+from model.mineclip import MineCLIP, utils as U
+from util.pertrel_oss_helper import init_clients
 
 """
 Transfer video frames into Vit features
 then, split captions into past, current, future sentences
 """
-def get_args():
-    parser = argparse.ArgumentParser(description="Easy video feature extractor")
-    parser.add_argument("--trans", default="s3://minedojo/trans/v1/", type=str)
-    parser.add_argument("--output_path", default="./data/Minedojo/mineclip_features.npy", type=str)
-    parser.add_argument("--model_path", default="./data/Minedojo/attn.pth", type=str)
-    parser.add_argument("--cluster", default="cluster1", type=str)
-    parser.add_argument("--keywords", default=[], type=str, nargs="+")
-    parser.add_argument("--world_size", default=8, type=int)
-    parser.add_argument("--half_precision", type=bool, default=True, help="whether to output half precision float or not")
-    args = parser.parse_args()
-    return args
-
-def torch_normalize(tensor: torch.Tensor, mean, std, inplace=False):
-    """
-    Adapted from https://pytorch.org/docs/stable/_modules/torchvision/transforms/functional.html#normalize
-
-    Normalize a tensor image with mean and standard deviation.
-
-    .. note::
-        This transform acts out of place by default, i.e., it does not mutates the input tensor.
-
-    See :class:`~torchvision.transforms.Normalize` for more details.
-
-    Args:
-        tensor (Tensor): Tensor image of size (C, H, W) to be normalized.
-        mean (sequence): Sequence of means for each channel.
-        std (sequence): Sequence of standard deviations for each channel.
-        inplace(bool,optional): Bool to make this operation inplace.
-
-    Returns:
-        Tensor: Normalized Tensor image.
-    """
-    if not torch.is_tensor(tensor):
-        raise TypeError("tensor should be a torch tensor. Got {}.".format(type(tensor)))
-
-    if not inplace:
-        tensor = tensor.clone()
-
-    dtype = tensor.dtype
-    mean = torch.as_tensor(mean, dtype=dtype, device=tensor.device)
-    std = torch.as_tensor(std, dtype=dtype, device=tensor.device)
-    if (std == 0).any():
-        raise ValueError(
-            f"std evaluated to zero after conversion to {dtype}, leading to division by zero."
-        )
-    if mean.ndim == 1:
-        mean = mean[:, None, None]
-    if std.ndim == 1:
-        std = std[:, None, None]
-    tensor.sub_(mean).div_(std)
-    return tensor
-
-def resize_frames(frames, resolution):
-    return kornia.geometry.transform.resize(frames, resolution).clamp(0.0, 255.0)
-
-def run_extract_features(rank, world_size, args, clips, mp_lock):
-    dist.init_process_group("nccl", init_method="env://", rank=rank, world_size=world_size)
-    torch.cuda.set_device(rank)
-    device = torch.device("cuda", rank) if torch.cuda.is_available() else "cpu"
-
+def init_clip_models(n_process, n_gpu):
+    """return n_process clip models evenly distributed on n_gpu gpus"""
     clip_param = {
         "arch": "vit_base_p16_fz.v2.t2",
         "hidden_dim": 512,
@@ -94,84 +28,101 @@ def run_extract_features(rank, world_size, args, clips, mp_lock):
         "pool_type": "attn.d2.nh8.glusw",
         "resolution": [160, 256],
     }
-    model = MineCLIP(**clip_param).to(device)
-    model.load_ckpt(args.model_path, strict=True)
-    model.clip_model.vision_model.projection = None
+    models = []
+    for rank in range(n_process):
+        device = torch.device("cuda", rank % n_gpu) if n_gpu > 0 else "cpu"
+        model = MineCLIP(**clip_param).to(device)
+        model.load_ckpt(args.model_path, strict=True)
+        model.clip_model.vision_model.projection = None
+        model.eval()
+        models.append(model)
+    for model in models:
+        print(next(model.parameters()).device)
+    return models
 
-    client = Client()
-    pbar = tqdm(total=sum([len(clips[keyword][rank::world_size]) for keyword in args.keywords]))
-    with torch.no_grad():
-        output_features = {}
-        for keyword in args.keywords:
-            output_features[keyword] = {}
-            for i, p in enumerate(clips[keyword][rank::world_size]):
-                # Extract video features
-                frames = load_npy(client, f"{args.trans}{keyword}/{p}.npy")
-                # stream = BytesIO(client.get(f"{args.trans}{keyword}/{p}.npy"))   # enable_stream=True for large data
-                # frames = np.load(stream, encoding="bytes")
-                # 64, H, W, C -> 64, C, H, W
-                frames = torch.tensor(frames[::].transpose(0, 3, 1, 2), dtype=float, device=device)
-                frames = resize_frames(frames, clip_param["resolution"])
-                frames = torch_normalize(frames / 255.0, mean=MC_IMAGE_MEAN, std=MC_IMAGE_STD)
-                features = model.forward_image_features(frames).cpu().numpy()
-                if args.half_precision:
-                    features = features.astype("float16")
+@torch.no_grad()
+def run_extract_features(input):
+    try:
+        args, name, clients, models = input
+        rank = mp.current_process()._identity[0] - 1
+        client = clients[rank]
+        model = models[rank]
+        device = torch.device("cuda", rank % args.n_gpu) if args.n_gpu > 0 else "cpu"
 
-                # Extract captions
-                text = load_npy(client, f"{args.trans}{keyword}/{p}.txt")
-                splits = [item.split("|") for item in text.replace(" ", "").split("\n")]
-                err = [x for x in splits[:-1] if len(x) != 3]
-                if len(err) > 0:
-                    print(err)
-                splits = [x for x in splits if len(x) == 3]
-                captions = {
-                    "start": np.array([float(x[0])for x in splits], dtype=np.float16),
-                    "end": np.array([float(x[1])for x in splits], dtype=np.float16),
-                    "word": np.array([x[2]for x in splits]),
-                }
+        # Extract video features
+        frames = client.load_nbz(f"{args.input_path}{name}.nbz")
+        # 64, H, W, C -> 64, C, H, W
+        frames = U.any_to_torch_tensor(frames.transpose(0, 3, 1, 2), dtype=torch.uint8, device=device)
+        image_feats = model.forward_image_features(frames).cpu().numpy()
+        if args.half_precision:
+            image_feats = image_feats.astype("float16")
 
-                output_features[keyword][p] = [features, captions]
-                pbar.update(1)
-                # break
-        
-        # Gather features and save to npy
-        print(dist.get_rank(), output_features)
-        if dist.get_rank() == 0:
-            rt = [None for _ in range(dist.get_world_size())]
-            dist.gather_object(output_features, rt, dst=0)
-            for i in range(1, len(rt)):
-                for keyword in args.keywords:
-                    output_features[keyword].update(rt[i][keyword])
-            np.save(args.output_path, output_features)
-            print(f"Extraction completed, saved to {args.output_path}, total length: {sum([len(output_features[keyword]) for keyword in args.keywords])}")
-        else:
-            dist.gather_object(output_features, dst=0)
+        # Extract captions
+        text = client.load_txt(f"{args.input_path}{name}.txt")
+        splits = [item.split("|") for item in text.replace(" ", "").split("\n")]
+        err = [x for x in splits[:-1] if len(x) != 3]
+        if len(err) > 0:
+            print(err)
+        splits = [x for x in splits if len(x) == 3]
+        output = {
+            "feats": image_feats,
+            "words": np.array([x[2]for x in splits]),
+            "starts": np.array([float(x[0])for x in splits], dtype=np.float16),
+            "lens": np.array([float(x[1])for x in splits], dtype=np.float16),
+        }
+        client.save_npz(f"{args.output_path}{name}.npz", output)
+    except Exception:
+        print(traceback.format_exc())
+        print(sys.exc_info()[2])
+        return 0
+    return 1
 
-
-def main(args):
-    # mp_array = mp.Array("i", [0 for _ in range(cfg.world_size)])
-    mp_lock = mp.Lock()
-    client = Client()
-    if len(args.keywords) == 0:
-        args.keywords = [x[:-1] for x in list(client.list(f"{args.cluster}:{args.trans}"))]
-    print("keywords: ", args.keywords)
-    clips = {
-        keyword: [
-            x[:-4] for x in list(client.list(f"{args.cluster}:{args.trans}{keyword}/")) if x.endswith(".npy")
-        ] for keyword in args.keywords
-    }
-    print("total clips:", sum([len(v)for v in clips.values()]))
-    mp.spawn(run_extract_features,
-        args=(args.world_size, args, clips, mp_lock),
-        nprocs=args.world_size,
-        join=True)
 
 if __name__ == "__main__":
-    # os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
     os.environ["CUDA_LAUNCH_BLOCKING"] = '1'
-    os.environ["MASTER_ADDR"] = "127.0.0.1"
-    os.environ["MASTER_PORT"] = str(49505)
+    os.environ["MASTER_ADDR"] = "localhost"
+    os.environ["MASTER_PORT"] = str(49600)
     mp.set_start_method('spawn', force = True)
-    args = get_args()
+    
+    parser = argparse.ArgumentParser(description="Easy video feature extractor")
+    parser.add_argument("--input_path", default="s3://minedojo/trans/v1/", type=str)
+    parser.add_argument("--output_path", default="s3://minedojo/feats/v1/", type=str)
+    parser.add_argument("--model_path", default="./data/Minedojo/attn.pth", type=str)
+    parser.add_argument("--n_process", default=1, type=int)
+    parser.add_argument("--n_gpu", default=torch.cuda.device_count(), type=int)
+    parser.add_argument("--half_precision", type=bool, default=True, help="whether to output half precision float or not")
+    args = parser.parse_args()
     print(args)
-    main(args)
+
+    clients = init_clients(args.n_process)
+    models = init_clip_models(args.n_process, args.n_gpu)
+
+    # load clip indices & models
+    print("fetching nbz indices")
+    files = set(clients[0].list(args.input_path))
+    # files = set(["-7OrkmVmS38_199.09.nbz", "-7OrkmVmS38_199.09.txt", "-7NkbSPZMLY_872.14.nbz", "-7NkbSPZMLY_872.14.txt"])
+    print(f"loaded {len(files)} files")
+
+    print("fetching extracted indices")
+    downloaded_indices = set([x[:-4] for x in clients[0].list(args.output_path)])
+    # downloaded_indices = set()
+    print(f"loaded {len(downloaded_indices)} downloaded indices")
+
+    # load clip indices to download
+    indices = []
+    for file in files:
+        if not file.endswith(".nbz"):
+            continue
+        if f"{file[:-4]}.txt" in files and file[:-4] not in downloaded_indices:
+            indices.append([args, file[:-4], clients, models])
+    print(f"total clips to extract: {len(indices)}")
+    with Pool(processes=args.n_process) as pool:
+        results = list(tqdm(
+            pool.imap_unordered(
+                run_extract_features,
+                indices,
+            ),
+            total=len(indices)
+        ))
+    print("total processed video clips", sum(results))
+

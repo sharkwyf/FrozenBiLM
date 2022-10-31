@@ -4,8 +4,8 @@ unset HTTP_PROXY
 unset HTTPS_PROXY
 
 python extract/extract_mineclip_features.py \
-    --trans="s3://minedojo/trans/v1/" \
-    --output_path="./data/Minedojo/mineclip_features.npy" \
+    --input_path="s3://minedojo/trans/v1/" \
+    --output_path="s3://minedojo/feats/v1/" \
+    --model_path="./data/Minedojo/attn.pth" \
+    --n_process=8 \
     --half_precision=True \
-    --world_size=8 \
-    # --keywords stone_pickaxe \

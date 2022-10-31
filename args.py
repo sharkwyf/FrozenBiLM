@@ -25,8 +25,12 @@ def get_args_parser():
     
     # Minedojo
     parser.add_argument(
+        "--video_index_file",
+        default=os.path.join(DATA_DIR, name2folder["minedojo"], "minedojo_clips.json"),
+    )
+    parser.add_argument(
         "--minedojo_features_path",
-        default=os.path.join(DATA_DIR, name2folder["minedojo"], "mineclip_features.npy"),
+        default="s3://minedojo/feats/v1/",
     )
     parser.add_argument(
         "--minedojo_text_start",
@@ -60,7 +64,7 @@ def get_args_parser():
         "--combine_datasets_val",
         nargs="+",
         help="list of datasets to combine for eval",
-        required=True,
+        required=False,
     )
     parser.add_argument(
         "--webvid_features_path",

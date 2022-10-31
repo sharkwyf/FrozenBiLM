@@ -1,5 +1,5 @@
 
-docker run --gpus all --ipc=host --network=bridge --expose 80 --rm -itd\
+docker run --gpus all --ipc=host --network=bridge --expose 80 --rm -itd --cpus="112" \
     --mount src=$(pwd),dst=/FrozenBiLM,type=bind \
     --env DATA_DIR="/FrozenBiLM/data" \
     --env TRANSFORMERS_CACHE="/FrozenBiLM/transformers_cache" \

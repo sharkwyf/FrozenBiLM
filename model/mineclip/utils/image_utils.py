@@ -29,11 +29,11 @@ def basic_image_tensor_preprocess(
     input_size = img.size()[-2:]
 
     if shape and input_size != shape:
-        warnings.warn(
-            f'{"Down" if shape < input_size else "Up"}sampling image'
-            f" from original resolution {input_size}x{input_size}"
-            f" to {shape}x{shape}"
-        )
+        # warnings.warn(
+        #     f'{"Down" if shape < input_size else "Up"}sampling image'
+        #     f" from original resolution {input_size}x{input_size}"
+        #     f" to {shape}x{shape}"
+        # )
         img = kornia.geometry.transform.resize(img, shape).clamp(0.0, 255.0)
 
     B, C, H, W = img.size()
