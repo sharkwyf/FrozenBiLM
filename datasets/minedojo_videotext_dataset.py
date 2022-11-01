@@ -4,40 +4,49 @@ import pandas as pd
 import numpy as np
 import os
 import json
-from multiprocessing import Queue
+from torch.multiprocessing import Manager, Queue
 from util.pertrel_oss_helper import init_clients
 
 
 class Minedojo_VideoText_Dataset(Dataset):
-    def __init__(self, video_index_file, features_path, *, max_feats=10, features_dim=768, start=-40, end=24, vid_start=-8, vid_end=8, n_process=8):
+    def __init__(self, video_index_file, features_path, *, max_feats=16, features_dim=768, start=-40, end=24, vid_start=-8, vid_end=8, n_process=8):
         with open(video_index_file) as f:
             self.video_indices = json.load(f)
         self._clients = init_clients(n_process)
+        self._available_clt_indices = Queue(len(self._clients))
+        for i in range(len(self._clients)):
+            self._available_clt_indices.put(i)
+        
+        print(f"fetching data indices from {features_path}")
         self.data = list(self._clients[0].list(features_path))
+        print(f"fetched {len(self.data)} indices")
 
+        self._features_path = features_path
         self._max_feats = max_feats
         self._features_dim = features_dim
         self._start = start
         self._end = end
         self._vid_start = vid_start
         self._vid_end = vid_end
-        print(f"total loaded {len(self.data)} clips")
         
 
     def __len__(self):
         return len(self.data)
 
     def __getitem__(self, idx):
-        frames, captions = self.data[idx]
-        text = captions["word"]
-        masked = (self._start < captions["start"]) & (captions["start"] <= self._end)
-        pre_masked = captions["start"] <= self._vid_start
-        in_masked = (self._vid_start < captions["start"]) & (captions["start"] <= self._vid_end)
-        post_masked = self._vid_end < captions["start"]
+        clt_idx = self._available_clt_indices.get()
+        data = self._clients[clt_idx].load_npz(f"{self._features_path}{self.data[idx]}").item()
+        self._available_clt_indices.put(clt_idx)
+        frames, words, starts, lens = data["feats"], data["words"], data["starts"], data["lens"]
 
-        pre_text = " ".join(text[masked & pre_masked])
-        in_text = " ".join(text[masked & in_masked])
-        post_text = " ".join(text[masked & post_masked])
+        masked = (self._start < starts) & (starts <= self._end)
+        pre_masked = starts <= self._vid_start
+        in_masked = (self._vid_start < starts) & (starts <= self._vid_end)
+        post_masked = self._vid_end < starts
+
+        pre_text = " ".join(words[masked & pre_masked])
+        in_text = " ".join(words[masked & in_masked])
+        post_text = " ".join(words[masked & post_masked])
 
         try:
             video = th.from_numpy(frames).float()
