@@ -1,17 +1,30 @@
 
 MINECRAFT_OBJECTS = [
-    "wood", "woods", "pickaxe", "axe", "tree", "trees", "grass", "dirt", "dirts", 
-    "stone", "stones", "sand", "ore", "plank", "planks", "water", "pig", "cow", "sheep",
-    "sky", 
+    # materials
+    "wood", "woods", "pickaxe", "axe", "dirt", "dirts", 
+    "stone", "stones", "sand", "ore", "plank", "planks", "water",
+    # objects
+    "pig", "cow", "sheep", "horse", "sky", "tree", "trees", "grass",
+    # find cave
+    "cave", "road", "path", "torch", "stick", "coal",
+    # make waterfall
+    "bucket", "waterfall", "water", "river", 
+    # build animal pen
+    "pen", "fence", "animal", "villange",
+    # build house
+    "house", "door", "window", "floor", "ground",
 ]
 
 VERB_NOUN_PAIRS = {
     "move": ["left", "right", "forward", "backward"],
+    "run": [],
     "turn": ["left", "right"],
     "jump": [],
+    "climb": [],
     "get": MINECRAFT_OBJECTS,
     "make": [],
     "use": [],
+    "build": [],
     "craft": [],
     "see": [],
     "find": [],
@@ -23,11 +36,14 @@ VERB_NOUN_PAIRS = {
 
 VERB_PHASE = {
     "move": ["moved", "moving"],
+    "run": ["ran", "running"],
     "turn": ["turned", "turning"],
     "jump": ["jumped", "jumping"],
+    "climb": ["climbed", "climbing"],
     "get": ["got", "getting"],
     "make": ["made", "making"],
     "use": ["used", "using"],
+    "build": ["built", "building"],
     "craft": ["crafted", "crafting"],
     "see": ["saw", "seeing"],
     "find": ["found", "finding"],

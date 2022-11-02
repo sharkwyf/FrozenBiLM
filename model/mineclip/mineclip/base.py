@@ -35,7 +35,7 @@ class VideoRewardBase(nn.Module):
         self.temporal_encoder = temporal_encoder
         self.reward_head = reward_head
 
-    def forward_image_features(self, frames):
+    def forward_image_features(self, frames, shape=None):
         """
         [..., C, H, W] -> [..., F], independent encoding of each frame image
         """
@@ -44,7 +44,7 @@ class VideoRewardBase(nn.Module):
         C, H, W = frames.size()[-3:]
         frames = frames.view(-1, C, H, W)
         frames = U.basic_image_tensor_preprocess(
-            frames, mean=MC_IMAGE_MEAN, std=MC_IMAGE_STD
+            frames, mean=MC_IMAGE_MEAN, std=MC_IMAGE_STD, shape=shape
         )
         features = self.image_encoder(frames)
         return features.view(*leading_dims, features.size(-1))

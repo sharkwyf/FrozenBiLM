@@ -28,53 +28,9 @@ from util.misc import get_mask, mask_tokens, adjust_learning_rate
 from util.verb_noun import VERB_NOUN_PAIRS, VERB_PHASE, ALL_WORDS
 
 
-MC_IMAGE_MEAN = (0.3331, 0.3245, 0.3051)
-MC_IMAGE_STD = (0.2439, 0.2493, 0.2873)
-
 """
 Label intentions given a video 
 """
-
-def torch_normalize(tensor: torch.Tensor, mean, std, inplace=False):
-    """
-    Adapted from https://pytorch.org/docs/stable/_modules/torchvision/transforms/functional.html#normalize
-
-    Normalize a tensor image with mean and standard deviation.
-
-    .. note::
-        This transform acts out of place by default, i.e., it does not mutates the input tensor.
-
-    See :class:`~torchvision.transforms.Normalize` for more details.
-
-    Args:
-        tensor (Tensor): Tensor image of size (C, H, W) to be normalized.
-        mean (sequence): Sequence of means for each channel.
-        std (sequence): Sequence of standard deviations for each channel.
-        inplace(bool,optional): Bool to make this operation inplace.
-
-    Returns:
-        Tensor: Normalized Tensor image.
-    """
-    if not torch.is_tensor(tensor):
-        raise TypeError("tensor should be a torch tensor. Got {}.".format(type(tensor)))
-
-    if not inplace:
-        tensor = tensor.clone()
-
-    dtype = tensor.dtype
-    mean = torch.as_tensor(mean, dtype=dtype, device=tensor.device)
-    std = torch.as_tensor(std, dtype=dtype, device=tensor.device)
-    if (std == 0).any():
-        raise ValueError(
-            f"std evaluated to zero after conversion to {dtype}, leading to division by zero."
-        )
-    if mean.ndim == 1:
-        mean = mean[:, None, None]
-    if std.ndim == 1:
-        std = std[:, None, None]
-    tensor.sub_(mean).div_(std)
-    return tensor
-
 def resize_frames(frames, resolution):
     return kornia.geometry.transform.resize(frames, resolution).clamp(0.0, 255.0)
 
@@ -136,15 +92,50 @@ def main(args):
     # L, H, W, C -> L, C, H, W
     t_frames = torch.tensor(frames.transpose(0, 3, 1, 2), dtype=float, device=device)
     t_frames = resize_frames(t_frames, clip_param["resolution"])
-    t_frames = torch_normalize(t_frames / 255.0, mean=MC_IMAGE_MEAN, std=MC_IMAGE_STD)
     # L, H, W, C -> L / fps, 768
     features = clip_model.forward_image_features(t_frames[::frame_rate]).unsqueeze(0)
     print("len of features: ", features.shape)
 
     texts = [
-        "I was [MASK] [MASK] [MASK] [MASK] [MASK] [MASK]",
-        "To build a house, now I need to [MASK] [MASK] [MASK] [MASK] [MASK] [MASK]"
+        # "I saw [MASK] [MASK] [MASK] afront of me",
+        # "I had [MASK] [MASK] [MASK] in my hand",
+        # "I have [MASK] [MASK] [MASK] in my hand",
+        # "I just got [MASK] [MASK] [MASK]",
+        # "I just obtained [MASK] [MASK] [MASK]",
+        # "What was I doing? I was [MASK] [MASK] [MASK]",
+        # "In minecraft, I just [MASK] [MASK] [MASK]",
+        # "Let's think step by step. In minecraft, now I should [MASK] [MASK] [MASK] to craft a diamond axe",
+        # "Let's think step by step. In minecraft, now I should [MASK] [MASK] [MASK] to find a cave",
+        # "Let's think step by step. In minecraft, now I should [MASK] [MASK] [MASK] to make a waterfall",
+        # "Let's think step by step. In minecraft, now I should [MASK] [MASK] [MASK] to build an animal pen",
+        # "Let's think step by step. In minecraft, now I should [MASK] [MASK] [MASK] to build a house",
+
+        # Action
+        "What I am doing is I am [MASK] [MASK] [MASK] .",
+        "What am I doing? I am [MASK] [MASK] [MASK] .",
+        "I am [MASK] [MASK] [MASK] just now."
+        "What I was doing is I [MASK] [MASK] [MASK] .",
+        "What was I doing? I [MASK] [MASK] [MASK] .",
+        "I was [MASK] [MASK] [MASK] in past few seconds."
+        "What I just did is I [MASK] [MASK] [MASK] .",
+        "What did I just do? I [MASK] [MASK] [MASK] .",
+        "I just [MASK] [MASK] [MASK] in past few seconds."
+        "What I have just done is I [MASK] [MASK] [MASK] .",
+        "What have I just done? I [MASK] [MASK] [MASK] .",
+        "I have just [MASK] [MASK] [MASK] in past few seconds."
+        # Objects
+        "I am using [MASK] [MASK] [MASK] .",
+        "I saw [MASK] [MASK] [MASK] afront of me, and [MASK] [MASK] [MASK] besides .",
+        "I have [MASK] [MASK] [MASK] in my hand .",
+        "I just obtained [MASK] [MASK] [MASK] in past few seconds.",
+        # Inference
+        "Let's think step by step. In minecraft, now I should [MASK] [MASK] [MASK] to craft a diamond axe .",
+        "Let's think step by step. In minecraft, now I should [MASK] [MASK] [MASK] to find a cave .",
+        "Let's think step by step. In minecraft, now I should [MASK] [MASK] [MASK] to make a waterfall .",
+        "Let's think step by step. In minecraft, now I should [MASK] [MASK] [MASK] to build an animal pen .",
+        "Let's think step by step. In minecraft, now I should [MASK] [MASK] [MASK] to build a house .",
     ]
+    step = 0
     rt = [t for t in texts]
     for i in range(len(frames)):
         if (i - args.max_feats * frame_rate) >= 0 and (i - args.max_feats * frame_rate) % (args.sample_interval * frame_rate) == 0:
@@ -178,13 +169,14 @@ def main(args):
                     logits = output.logits[:,video_len:,:len(answer_bias)] + answer_bias
                     encoded_output = logits.argmax(dim=2)
                     input_ids[0][min_idx] = encoded_output[0][min_idx]
-                    print(min_idx, input_ids)
+                    # print(min_idx, input_ids)
                 rt[num] = tokenizer.batch_decode(input_ids[:, 1:-1])[0]
             print(rt)
+            step += 1
                 
         for j, text in enumerate(rt):
             cv2.putText(frames[i], 
-                "{}".format(text), 
+                "{}: {}".format(step, text), 
                 (50, 50 + 30 * j), 
                 font, 0.6, 
                 (0, 255, 255), 

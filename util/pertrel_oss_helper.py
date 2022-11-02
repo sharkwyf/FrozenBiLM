@@ -47,7 +47,12 @@ class PetrelClient(Client):
         with BytesIO() as f:
             f.write(file.encode('utf-8'))
             self.put(url, f.getvalue())
-            
+    
+    def save_image(self, local_dir:str, remote_url:str):
+        import os 
+        # os.system("aws s3 mb {} --endpoint-url={}".format(remote_dir, self.ENDPOINT_URL))
+        os.system("aws s3 cp {} {} --recursive --endpoint-url={}".format(local_dir, remote_url, self.ENDPOINT_URL))
+    
     def load_nbz(self, url: str):
         import bz2
         import numpy

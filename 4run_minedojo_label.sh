@@ -11,3 +11,4 @@ python demo_video_label.py \
     --half_precision=True \
     --load=./output/minedojo/checkpoint0001.pth \
     --answer_bias_weight=100 \
+    --max_feats=16 \
