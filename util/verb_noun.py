@@ -1,10 +1,11 @@
 
 MINECRAFT_OBJECTS = [
     # materials
-    "wood", "woods", "pickaxe", "axe", "dirt", "dirts", 
-    "stone", "stones", "sand", "ore", "plank", "planks", "water",
+    "wood", "woods", "pickaxe", "axe", "dirt", "dirts", "cobblestone", "cobblestones", "cobble", "plank", "planks", 
+    "stone", "stones", "sand", "ore", "plank", "planks", "water", "bucket", "waterbucket",
     # objects
-    "pig", "cow", "sheep", "horse", "sky", "tree", "trees", "grass",
+    "pig", "cow", "sheep", "horse", "bee", "bug", "rabbit", "wolf", "dog", "cat",
+    "sky", "tree", "trees", "grass",
     # find cave
     "cave", "road", "path", "torch", "stick", "coal",
     # make waterfall
@@ -12,7 +13,10 @@ MINECRAFT_OBJECTS = [
     # build animal pen
     "pen", "fence", "animal", "villange",
     # build house
-    "house", "door", "window", "floor", "ground",
+    "house", "door", "window", "floor", "ground", "brick",
+
+    # misc
+    "nothing", "else", "tower", "hill", "mountain",
 ]
 
 VERB_NOUN_PAIRS = {

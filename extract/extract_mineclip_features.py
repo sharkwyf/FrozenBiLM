@@ -65,10 +65,8 @@ def consumer1(args, queue1, queue2, lock, rank):
         try:
             [name, frames, splits] = queue1.get()
             # 64, H, W, C -> 64, C, H, W
-            frames = U.any_to_torch_tensor(frames.transpose(0, 3, 1, 2), dtype=torch.uint8, device=device)
+            frames = U.any_to_torch_tensor(frames.transpose(0, 3, 1, 2), dtype=torch.float, device=device)
             image_feats = model.forward_image_features(frames).cpu().numpy()
-            if args.half_precision:
-                image_feats = image_feats.astype("float16")
 
             output = {
                 "feats": image_feats,
@@ -103,13 +101,12 @@ if __name__ == "__main__":
     
     parser = argparse.ArgumentParser(description="Easy video feature extractor")
     parser.add_argument("--input_path", default="s3://minedojo/trans/v1/", type=str)
-    parser.add_argument("--output_path", default="s3://minedojo/feats/v1/", type=str)
+    parser.add_argument("--output_path", default="s3://minedojo/feats/test/", type=str)
     parser.add_argument("--model_path", default="./data/Minedojo/attn.pth", type=str)
     parser.add_argument("--n_producer1", default=1, type=int)
     parser.add_argument("--n_consumer1", default=1, type=int)
     parser.add_argument("--n_consumer2", default=1, type=int)
     parser.add_argument("--n_gpu", default=torch.cuda.device_count(), type=int)
-    parser.add_argument("--half_precision", type=bool, default=True, help="whether to output half precision float or not")
     args = parser.parse_args()
     print(args)
 
