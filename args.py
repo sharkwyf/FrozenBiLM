@@ -41,15 +41,23 @@ def get_args_parser():
         type=float,
     )
     parser.add_argument(
+        "--minedojo_vid_start",
+        type=float,
+    )
+    parser.add_argument(
+        "--minedojo_vid_end",
+        type=float,
+    )
+    parser.add_argument(
         "--minedojo_mask_probs",
         nargs="+",
-        default=None,
+        default=[0., 0.15, 0.],
         type=float,
     )
     parser.add_argument(
         "--minedojo_loss_weights",
         nargs="+",
-        default=None,
+        default=[0, 1, 0],
         type=float,
     )
 

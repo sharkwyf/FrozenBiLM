@@ -9,9 +9,9 @@ from util.pertrel_oss_helper import init_clients
 
 
 class Minedojo_VideoText_Dataset(Dataset):
-    def __init__(self, video_index_file, features_path, *, max_feats=16, features_dim=768, start=-40, end=24, vid_start=-8, vid_end=8, n_process=8):
-        with open(video_index_file) as f:
-            self.video_indices = json.load(f)
+    def __init__(self, features_path, *, max_feats=16, features_dim=768, text_start=-40, text_end=24, vid_start=-8, vid_end=8, n_process=8):
+        # with open(video_index_file) as f:
+        #     self.video_indices = json.load(f)
         self._clients = init_clients(n_process)
         self._available_clt_indices = Queue(len(self._clients))
         for i in range(len(self._clients)):
@@ -24,8 +24,8 @@ class Minedojo_VideoText_Dataset(Dataset):
         self._features_path = features_path
         self._max_feats = max_feats
         self._features_dim = features_dim
-        self._start = start
-        self._end = end
+        self._text_start = text_start
+        self._text_end = text_end
         self._vid_start = vid_start
         self._vid_end = vid_end
         
@@ -39,7 +39,7 @@ class Minedojo_VideoText_Dataset(Dataset):
         self._available_clt_indices.put(clt_idx)
         frames, words, starts, lens = data["feats"], data["words"], data["starts"], data["lens"]
 
-        masked = (self._start < starts) & (starts <= self._end)
+        masked = (self._text_start < starts) & (starts <= self._text_end)
         pre_masked = starts <= self._vid_start
         in_masked = (self._vid_start < starts) & (starts <= self._vid_end)
         post_masked = self._vid_end < starts
@@ -50,12 +50,13 @@ class Minedojo_VideoText_Dataset(Dataset):
 
         try:
             video = th.from_numpy(frames).float()
-            indices = sorted(np.random.choice(video.shape[0] - 2, self._max_feats - 2, replace=False) + 1)
+            start_idx, end_idx = int((self._vid_start + 8) * 4), int((self._vid_end + 8) * 4)
+            indices = sorted(np.random.choice(end_idx - start_idx - 2, self._max_feats - 2, replace=False) + start_idx + 1)
+            indices = [start_idx] + indices + [end_idx]
             if len(video) > self._max_feats:
-                sampled = [video[0]]
+                sampled = []
                 for j in indices:
                     sampled.append(video[j])
-                sampled += [video[-1]]
                 video = th.stack(sampled)
                 video_len = self._max_feats
             elif len(video) < self._max_feats:
@@ -91,12 +92,13 @@ def minedojo_videotext_collate_fn(batch):
 
 def build_minedojo_videotext_dataset(args):
     full_dataset = Minedojo_VideoText_Dataset(
-        video_index_file=args.video_index_file,
         features_path=args.minedojo_features_path,
         max_feats=args.max_feats,
         features_dim=args.features_dim,
-        start=args.minedojo_text_start,
-        end=args.minedojo_text_end,
+        text_start=args.minedojo_text_start,
+        text_end=args.minedojo_text_end,
+        vid_start=args.minedojo_vid_start,
+        vid_end=args.minedojo_vid_end,
     )
     train_size = int(len(full_dataset) * 0.9)
     test_size = len(full_dataset) - train_size

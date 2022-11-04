@@ -71,16 +71,20 @@ def main(args):
     # Extract frames from video
     cap = cv2.VideoCapture(args.video_path)
     frames = []
+    resized_frames = []
     frame_width = int(cap.get(3))
     frame_height = int(cap.get(4))
     frame_rate = int(cap.get(5))
     size = (frame_width, frame_height)
+    resized = [256, 160]
     while True:
         ret, frame = cap.read()
         if not ret:
             break
-        frames.append(cv2.resize(frame, clip_param["resolution"]))
+        frames.append(frame)
+        resized_frames.append(cv2.resize(frame, resized))
     frames = np.stack(frames)
+    resized_frames = np.stack(resized_frames)
     cap.release()
 
     result = cv2.VideoWriter(f"{args.output_dir}{Path(args.video_path).stem}_{Path(args.load).stem}_w{args.answer_bias_weight}.avi",
@@ -90,73 +94,67 @@ def main(args):
 
     # Extract features
     # L, H, W, C -> L, C, H, W
-    t_frames = torch.tensor(frames.transpose(0, 3, 1, 2), dtype=torch.float, device=device)
+    t_frames = U.any_to_torch_tensor(resized_frames.transpose(0, 3, 1, 2), dtype=torch.float, device=device)
     # L, H, W, C -> L / fps, 768
-    features = clip_model.forward_image_features(t_frames[::frame_rate]).unsqueeze(0)
+    features = clip_model.forward_image_features(t_frames[::frame_rate]).cpu().numpy()
+    features = torch.from_numpy(features).float().unsqueeze(0)
     print("len of features: ", features.shape, "dtype: ", features.dtype)
 
+    # to be clear, exactly, for now, let's think step by step, in minecraft
     texts = [
-        # "I saw [MASK] [MASK] [MASK] afront of me",
-        # "I had [MASK] [MASK] [MASK] in my hand",
-        # "I have [MASK] [MASK] [MASK] in my hand",
-        # "I just got [MASK] [MASK] [MASK]",
-        # "I just obtained [MASK] [MASK] [MASK]",
-        # "What was I doing? I was [MASK] [MASK] [MASK]",
-        # "In minecraft, I just [MASK] [MASK] [MASK]",
-        # "Let's think step by step. In minecraft, now I should [MASK] [MASK] [MASK] to craft a diamond axe",
-        # "Let's think step by step. In minecraft, now I should [MASK] [MASK] [MASK] to find a cave",
-        # "Let's think step by step. In minecraft, now I should [MASK] [MASK] [MASK] to make a waterfall",
-        # "Let's think step by step. In minecraft, now I should [MASK] [MASK] [MASK] to build an animal pen",
-        # "Let's think step by step. In minecraft, now I should [MASK] [MASK] [MASK] to build a house",
 
-        # to be clear, exactly, for now, let's think step by step, in minecraft
-        # Action
+        # Animals
+        # "I found a [mask]",
+        # "I found a [mask] now",
+        # "what's the animal, for now, there is a [MASK] over there",
+        # "what's the animal, for now, there is a [MASK] here",
+        # "what's the animal, for now, there is a [MASK] afront of me",
+        # "what's the animal, for now, there is a [MASK] in front of me",
+        # "what's the animal, for now, there is a [MASK] before me",
+        # "for now, I'm chasing the [MASK] in front of me",
+        # "for now, I'm chasing the [MASK] before me",
+        # "for now, I'm chasing the [MASK] afront of me",
+        # "for now, I'm chasing the [MASK] here",
+        # "for now, a [MASK] is looking at me",
+        # "for now, a [MASK] is staring at me",
+        # "for now, a [MASK] is watching me",
+        # "for now, a [MASK] is standing before me",
+
+        # Waterfall
         "let's think step by step, in minecraft, exactly, for now, I am in the [MASK] biome",
-        # "let's think step by step, in minecraft, exactly, for now, I just made a [MASK] [MASK] [MASK] successfully",
-        # "let's think step by step, in minecraft, exactly, for now, I just made a [MASK] [MASK] [MASK] successfully",
+        "let's think step by step, in minecraft, exactly, for now, I just made a [MASK] [MASK] [MASK] successfully",
         "let's think step by step, in minecraft, exactly, for now, I just found a [MASK] [MASK] [MASK] successfully",
-        # "in minecraft. I was walking. to be more specific, I'm [MASK] [MASK] [MASK] right now.",
-        # "what I'm doing in minecraft now is I'm [MASK] [MASK] [MASK] right now.",
-        # "what am I doing in minecraft now? to be clear, I'm [MASK] [MASK] [MASK] right now.",
-        # "to be clear, I'm [MASK] [MASK] [MASK] right now successfully.",
-        # "what I was doing in minecraft is I was [MASK] [MASK] [MASK] successfully.",
-        # "what was I doing in minecraft? I was [MASK] [MASK] [MASK] successfully.",
-        # "in minecraft, I was [MASK] [MASK] [MASK] successfully in the past few seconds.",
-        # "what I just did in minecraft is I [MASK] [MASK] [MASK] successfully.",
-        # "what did I just do in minecraft? I just [MASK] [MASK] [MASK] successfully.",
-        # "in minecraft, I just [MASK] [MASK] [MASK] successfully in the past few seconds.",
-        # "what I have just done in minecraft is I have just [MASK] [MASK] [MASK] successfully.",
-        # "what have I just done in minecraft? I have just [MASK] [MASK] [MASK] successfully.",
-        # "in minecraft, I have just [MASK] [MASK] [MASK] in the past few seconds.",
+        "in minecraft. I was walking. to be more specific, I'm [MASK] [MASK] [MASK] right now.",
+        "what I'm doing in minecraft now is I'm [MASK] [MASK] [MASK] right now.",
+        "what am I doing in minecraft now? to be clear, I'm [MASK] [MASK] [MASK] right now.",
+        "to be clear, I'm [MASK] [MASK] [MASK] right now successfully.",
+        "what I was doing in minecraft is I was [MASK] [MASK] [MASK] successfully.",
+        "what was I doing in minecraft? I was [MASK] [MASK] [MASK] successfully.",
+        "in minecraft, I was [MASK] [MASK] [MASK] successfully in the past few seconds.",
+        "what I just did in minecraft is I [MASK] [MASK] [MASK] successfully.",
+        "what did I just do in minecraft? I just [MASK] [MASK] [MASK] successfully.",
+        "in minecraft, I just [MASK] [MASK] [MASK] successfully in the past few seconds.",
+        "what I have just done in minecraft is I have just [MASK] [MASK] [MASK] successfully.",
+        "what have I just done in minecraft? I have just [MASK] [MASK] [MASK] successfully.",
+        "in minecraft, I have just [MASK] [MASK] [MASK] in the past few seconds.",
         # Objects
-        "what's moving? a [MASK] is moving",
-        "i met a [MASK]",
-        "what's the animal, for now, there is a [MASK] over there",
-        "what's the animal, for now, there is a [MASK] here",
-        "what's the animal, for now, there is a [MASK] afront of me",
-        "what's the animal, for now, there is a [MASK] in front of me",
-        "what's the animal, for now, there is a [MASK] before me",
-        "for now, I'm chasing the [MASK] in front of me",
-        "for now, I'm chasing the [MASK] before me",
-        "for now, I'm chasing the [MASK] afront of me",
-        "for now, I'm chasing the [MASK] here",
-        "for now, a [MASK] is looking at me",
-        "for now, a [MASK] is staring at me",
-        "for now, a [MASK] is watching me",
-        "for now, a [MASK] is standing before me",
-        # "let's think step by step, in minecraft, exactly, for now, I see [MASK] [MASK] afront of me now, and there is [MASK] [MASK] besides that.",
-        # "let's think step by step, in minecraft, exactly, for now, I have [MASK] [MASK] in my hand now.",
-        # "let's think step by step, in minecraft, exactly, for now, I'm holding [MASK] [MASK] in my hand now.",
-        # "let's think step by step, in minecraft, exactly, for now, I'm using [MASK] [MASK] in my hand to [MASK] [MASK] right now.",
-        # "let's think step by step, in minecraft, exactly, for now, I just obtained [MASK] [MASK] [MASK] from [MASK] [MASK] in the past few seconds .",
-        # Inference
-        # "let's think step by step, in minecraft, in order to craft a diamond axe, for now, the next step is to [MASK] [MASK] [MASK].",
-        # "let's think step by step, in minecraft, in order to find a cave, for now, the next step is to [MASK] [MASK] [MASK].",
-        # "let's think step by step, in minecraft, in order to make a waterfall, for now, the next step is to [MASK] [MASK] [MASK].",
-        # "let's think step by step, in minecraft, in order to build an animal pen, for now, the next step is to [MASK] [MASK] [MASK].",
-        # "let's think step by step, in minecraft, in order to build a house, for now, the next step is to [MASK] [MASK] [MASK].",
+        
+        # Common
+        "let's think step by step, in minecraft, exactly, for now, I see [MASK] [MASK] afront of me now, and there is [MASK] [MASK] besides that.",
+        "let's think step by step, in minecraft, exactly, for now, I have [MASK] [MASK] in my hand now.",
+        "let's think step by step, in minecraft, exactly, for now, I'm holding [MASK] [MASK] in my hand now.",
+        "let's think step by step, in minecraft, exactly, for now, I'm using [MASK] [MASK] in my hand to [MASK] [MASK] right now.",
+        "let's think step by step, in minecraft, exactly, for now, I just obtained [MASK] [MASK] [MASK] from [MASK] [MASK] in the past few seconds .",
+        "I saw [MASK] [MASK] [MASK] afront of me",
+        "I had [MASK] [MASK] [MASK] in my hand",
+        "I have [MASK] [MASK] [MASK] in my hand",
+        "I just got [MASK] [MASK] [MASK]",
+        "I just obtained [MASK] [MASK] [MASK]",
+        "What was I doing? I was [MASK] [MASK] [MASK]",
+        "In minecraft, I just [MASK] [MASK] [MASK]",
     ]
     step = 0
+    texts = [t.lower().replace(",", " ").replace(".", " ").replace("?", " ").replace("[mask]", "[MASK]") for t in texts]
     rt = [t for t in texts]
     for i in range(len(frames)):
         if (i - args.max_feats * frame_rate) >= 0 and (i - args.max_feats * frame_rate) % (args.sample_interval * frame_rate) == 0:
@@ -189,6 +187,8 @@ def main(args):
                     )
                     logits = output.logits[:,video_len:,:len(answer_bias)] + answer_bias
                     encoded_output = logits.argmax(dim=2)
+
+                    # generate one word at a time
                     input_ids[0][min_idx] = encoded_output[0][min_idx]
                     # print(min_idx, input_ids)
                 rt[num] = tokenizer.batch_decode(input_ids[:, 1:-1])[0]

@@ -6,8 +6,9 @@ import glob
 from io import BytesIO
 
 if __name__ == '__main__':
-    path = "/mnt/nfs/wangyuanfu/demodata/*.nbz"
-    out_path = "/mnt/nfs/wangyuanfu/demodata/"
+    path = "/mnt/nfs/wangyuanfu/data/*.nbz"
+    out_path = "/mnt/nfs/wangyuanfu/data/"
+    lens = []
     for name in glob.glob(path):
         print(name)
         # load text
@@ -26,7 +27,10 @@ if __name__ == '__main__':
                     "word": np.array([x[2]for x in splits]),
                 }
                 masked = (captions["start"] >= -8) & (captions["start"] <= 8)
+                lens.append(sum(masked))
                 text = " ".join(captions["word"][masked])
+                if lens[-1] > 30:
+                    print(lens[-1], text)
         else:
             continue
 

@@ -15,7 +15,7 @@ from collections import namedtuple
 
 from datasets import build_videotext_dataset, videotext_collate_fn, build_minedojo_videotext_dataset, minedojo_videotext_collate_fn
 from model import build_model, get_tokenizer
-from util.misc import get_mask, mask_tokens, adjust_learning_rate
+from util.misc import get_mask, mask_tokens, adjust_learning_rate, mask_split_texts
 from util import dist
 from util.metrics import MetricLogger
 from args import get_args_parser
@@ -42,10 +42,13 @@ def train_one_epoch(
         video = batch_dict["video"].to(device)
         video_len = batch_dict["video_len"]
         video_mask = get_mask(video_len, video.size(1)).to(device)
-        if args.minedojo_mask_probs:
+        if "minedojo" in args.combine_datasets:
             pre_text = batch_dict["pre_text"]
             in_text = batch_dict["in_text"]
             post_text = batch_dict["post_text"]
+
+            # a = mask_split_texts([pre_text, in_text, post_text], tokenizer, mlm_probabilities=args.minedojo_mask_probs)
+            
             encodeds = [
                 tokenizer(
                     _text,

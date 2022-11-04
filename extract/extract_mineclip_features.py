@@ -100,7 +100,7 @@ if __name__ == "__main__":
     mp.set_start_method('spawn', force = True)
     
     parser = argparse.ArgumentParser(description="Easy video feature extractor")
-    parser.add_argument("--input_path", default="s3://minedojo/trans/v1/", type=str)
+    parser.add_argument("--input_path", default="s3://minedojo/trans/test/", type=str)
     parser.add_argument("--output_path", default="s3://minedojo/feats/test/", type=str)
     parser.add_argument("--model_path", default="./data/Minedojo/attn.pth", type=str)
     parser.add_argument("--n_producer1", default=1, type=int)
@@ -118,8 +118,8 @@ if __name__ == "__main__":
     print(f"loaded {len(files)} files")
 
     print("fetching extracted indices")
-    downloaded_indices = set([x[:-4] for x in clients[0].list(args.output_path)])
-    # downloaded_indices = set()
+    # downloaded_indices = set([x[:-4] for x in clients[0].list(args.output_path)])
+    downloaded_indices = set()
     print(f"loaded {len(downloaded_indices)} downloaded indices")
 
     # load clip indices to download
