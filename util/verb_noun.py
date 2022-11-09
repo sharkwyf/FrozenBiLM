@@ -9,7 +9,7 @@ MINECRAFT_OBJECTS = [
     # find cave
     "cave", "road", "path", "torch", "stick", "coal",
     # make waterfall
-    "bucket", "waterfall", "water", "river", 
+    "bucket", "waterfall", "water", "river", "empty",
     # build animal pen
     "pen", "fence", "animal", "villange",
     # build house
@@ -17,6 +17,7 @@ MINECRAFT_OBJECTS = [
 
     # misc
     "nothing", "else", "tower", "hill", "mountain",
+    "some", "a", "an", "the", "one", "two", "three",
 ]
 
 VERB_NOUN_PAIRS = {
@@ -35,7 +36,7 @@ VERB_NOUN_PAIRS = {
     "dig": [],
     # "watch": [],
 
-    "dig": ["some", "a", "the", "one", "two"],
+    "dig": [],
 }
 
 VERB_PHASE = {
@@ -52,7 +53,8 @@ VERB_PHASE = {
     "see": ["saw", "seeing"],
     "find": ["found", "finding"],
     "dig": ["digged", "digging"],
-    # "watch": ["watched", "watching"],
+    "swim": ["swam", "swimming"],
+    "watch": ["watched", "watching"],
 }
 
 ALL_WORDS = set()
@@ -63,3 +65,7 @@ for verb, nouns in VERB_NOUN_PAIRS.items():
 for verb, phases in VERB_PHASE.items():
     for phase in phases:
         ALL_WORDS.add(phase)
+
+ALL_ACTIONS = set(
+    ["move", "jump", "swim", "climb", "stand"]
+)

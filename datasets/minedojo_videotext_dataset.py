@@ -9,9 +9,10 @@ from util.pertrel_oss_helper import init_clients
 
 
 class Minedojo_VideoText_Dataset(Dataset):
-    def __init__(self, features_path, *, max_feats=16, features_dim=768, text_start=-40, text_end=24, vid_start=-8, vid_end=8, n_process=8):
+    def __init__(self, tokenizer, features_path, *, max_feats=16, features_dim=768, text_start=-40, text_end=24, vid_start=-8, vid_end=8, n_process=8):
         # with open(video_index_file) as f:
         #     self.video_indices = json.load(f)
+        self._tokenizer = tokenizer
         self._clients = init_clients(n_process)
         self._available_clt_indices = Queue(len(self._clients))
         for i in range(len(self._clients)):
@@ -39,6 +40,7 @@ class Minedojo_VideoText_Dataset(Dataset):
         self._available_clt_indices.put(clt_idx)
         frames, words, starts, lens = data["feats"], data["words"], data["starts"], data["lens"]
 
+        # process texts
         masked = (self._text_start < starts) & (starts <= self._text_end)
         pre_masked = starts <= self._vid_start
         in_masked = (self._vid_start < starts) & (starts <= self._vid_end)
@@ -48,6 +50,7 @@ class Minedojo_VideoText_Dataset(Dataset):
         in_text = " ".join(words[masked & in_masked])
         post_text = " ".join(words[masked & post_masked])
 
+        # process videos
         try:
             video = th.from_numpy(frames).float()
             start_idx, end_idx = int((self._vid_start + 8) * 4), int((self._vid_end + 8) * 4)
@@ -73,7 +76,7 @@ class Minedojo_VideoText_Dataset(Dataset):
         return {"video": video, "video_len": video_len, "pre_text": pre_text, "in_text": in_text, "post_text": post_text}
 
 
-def minedojo_videotext_collate_fn(batch):
+def minedojo_videotext_collate_fn(tokenizer, batch):
     bs = len(batch)
     video = th.stack([batch[i]["video"] for i in range(bs)])
     video_len = th.tensor([batch[i]["video_len"] for i in range(bs)], dtype=th.long)
@@ -90,8 +93,9 @@ def minedojo_videotext_collate_fn(batch):
     }
 
 
-def build_minedojo_videotext_dataset(args):
+def build_minedojo_videotext_dataset(args, tokenizer):
     full_dataset = Minedojo_VideoText_Dataset(
+        tokenizer=tokenizer,
         features_path=args.minedojo_features_path,
         max_feats=args.max_feats,
         features_dim=args.features_dim,

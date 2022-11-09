@@ -88,12 +88,12 @@ def main(args):
     # L, H, W, C -> L, C, H, W
     t_frames = U.any_to_torch_tensor(frames.transpose(0, 3, 1, 2), dtype=torch.float, device=device)
     # L, H, W, C -> L / fps, 768
-    features = clip_model.forward_image_features(t_frames[::frame_rate]).cpu().numpy()
+    sample_rate = frame_rate // args.frames_per_second
+    features = clip_model.forward_image_features(t_frames[::sample_rate]).cpu().numpy()
     features = torch.from_numpy(features).float().unsqueeze(0)
     print("len of features: ", features.shape, "dtype: ", features.dtype)
 
-    video = features[:, args.start:args.end]
-    video = video[:, ::1]
+    video = features[:, args.start * args.frames_per_second:args.end * args.frames_per_second]
     video_len = torch.tensor(video.size(1), device=device)
     video_mask = get_mask(video_len, video.size(1)).to(device)
     print("input video len:", video_len, "frame rate:", frame_rate)
@@ -112,18 +112,19 @@ def main(args):
             args.start = int(text.split()[1])
             args.end = int(text.split()[2])
             print("start", args.start, "end", args.end)
-            video = features[:, args.start:args.end]
+            video = features[:, args.start * args.frames_per_second:args.end * args.frames_per_second]
             video = video[:, ::1]
             video_len = torch.tensor(video.size(1), device=device)
             video_mask = get_mask(video_len, video.size(1)).to(device)
-            print("input video len:", video_len, "frame rate:", frame_rate)
+            print("input features len:", video_len, "frame rate:", frame_rate)
 
             result = cv2.VideoWriter(f"{args.output_dir}qa_{Path(args.video_path).stem}.avi",
                 cv2.VideoWriter_fourcc(*'MJPG'),
-                1, resized)
-            for fr in frames[::frame_rate][args.start:args.end]:
+                args.frames_per_second, resized)
+            for fr in frames[::sample_rate][args.start * args.frames_per_second:args.end * args.frames_per_second]:
                 result.write(fr)
             result.release()
+            print("succeded: ", args.start * args.frames_per_second, args.end * args.frames_per_second)
             continue
 
         rt = [tokenizer(
@@ -162,9 +163,11 @@ if __name__ == "__main__":
     parser.add_argument("--video_path", default="./data/Minedojo/animals.mp4", type=str)
     parser.add_argument("--output_dir", default="./data/Minedojo/", type=str)
     parser.add_argument("--model_path", default="./data/Minedojo/attn.pth", type=str)
+    parser.add_argument("--frames_per_second", default=2, type=int)
+    parser.add_argument("--n_frames", default=16, type=int)
     parser.add_argument("--answer_bias_weight", default=0, type=float)
     parser.add_argument("--start", default=0, type=int)
-    parser.add_argument("--end", default=160, type=int)
+    parser.add_argument("--end", default=-1, type=int)
     args = parser.parse_args()
     args.model_name = os.path.join(os.environ["TRANSFORMERS_CACHE"], args.model_name)
     main(args)

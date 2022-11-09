@@ -239,7 +239,7 @@ def main(args):
     # Set up dataloaders
     if not args.eval:
         if "minedojo" in args.combine_datasets:
-            dataset_train, minedojo_dataset_val = build_minedojo_videotext_dataset(args)
+            dataset_train, minedojo_dataset_val = build_minedojo_videotext_dataset(args, tokenizer)
             sampler_train = (
                 DistributedSampler(dataset_train)
                 if args.distributed
