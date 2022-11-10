@@ -13,9 +13,9 @@ import argparse
 from torch.utils.data import DataLoader, DistributedSampler
 from collections import namedtuple
 
-from datasets import build_videotext_dataset, videotext_collate_fn, build_minedojo_videotext_dataset, minedojo_videotext_collate_fn
+from datasets import build_videotext_dataset, videotext_collate_fn, build_minedojo_videotext_dataset
 from model import build_model, get_tokenizer
-from util.misc import get_mask, mask_tokens, adjust_learning_rate, mask_split_texts
+from util.misc import get_mask, mask_tokens, adjust_learning_rate
 from util import dist
 from util.metrics import MetricLogger
 from args import get_args_parser
@@ -43,30 +43,8 @@ def train_one_epoch(
         video_len = batch_dict["video_len"]
         video_mask = get_mask(video_len, video.size(1)).to(device)
         if "minedojo" in args.combine_datasets:
-            pre_text = batch_dict["pre_text"]
-            in_text = batch_dict["in_text"]
-            post_text = batch_dict["post_text"]
-
-            # a = mask_split_texts([pre_text, in_text, post_text], tokenizer, mlm_probabilities=args.minedojo_mask_probs)
-            
-            encodeds = [
-                tokenizer(
-                    _text,
-                    add_special_tokens=True,
-                    max_length=args.max_tokens,
-                    padding="longest",
-                    truncation=True,
-                    return_tensors="pt",
-                ) for _text in [pre_text, in_text, post_text]
-            ]
-            (pre_inputs, pre_labels), (in_inputs, in_labels), (post_inputs, post_labels) = list(map(
-                lambda x: mask_tokens(
-                    x[0]["input_ids"], tokenizer, mlm_probability=x[1]
-                ),
-                list(zip(encodeds, args.minedojo_mask_probs)),
-            ))
-            encoded = encodeds[1]
-            inputs, labels = in_inputs.to(device), in_labels.to(device)
+            inputs, labels = batch_dict["inputs"].to(device), batch_dict["labels"].to(device)
+            attention_mask=batch_dict["attention_mask"].to(device)
         else:
             text = batch_dict["text"]
             encoded = tokenizer(
@@ -81,13 +59,14 @@ def train_one_epoch(
                 encoded["input_ids"], tokenizer, mlm_probability=args.mlm_prob
             )
             inputs, labels = inputs.to(device), labels.to(device)
-
+            attention_mask=encoded["attention_mask"].to(device)
+        
         # forward
         output = model(
             video=video,
             video_mask=video_mask,
             input_ids=inputs,
-            attention_mask=encoded["attention_mask"].to(device),
+            attention_mask=attention_mask,
             labels=labels,
         )
         loss = output["loss"]
@@ -142,27 +121,8 @@ def evaluate(
         video_len = batch_dict["video_len"]
         video_mask = get_mask(video_len, video.size(1)).to(device)
         if args.minedojo_mask_probs:
-            pre_text = batch_dict["pre_text"]
-            in_text = batch_dict["in_text"]
-            post_text = batch_dict["post_text"]
-            encodeds = [
-                tokenizer(
-                    _text,
-                    add_special_tokens=True,
-                    max_length=args.max_tokens,
-                    padding="longest",
-                    truncation=True,
-                    return_tensors="pt",
-                ) for _text in [pre_text, in_text, post_text]
-            ]
-            (pre_inputs, pre_labels), (in_inputs, in_labels), (post_inputs, post_labels) = list(map(
-                lambda x: mask_tokens(
-                    x[0]["input_ids"], tokenizer, mlm_probability=x[1]
-                ),
-                list(zip(encodeds, args.minedojo_mask_probs)),
-            ))
-            encoded = encodeds[1]
-            inputs, labels = in_inputs.to(device), in_labels.to(device)
+            inputs, labels = batch_dict["inputs"].to(device), batch_dict["labels"].to(device)
+            attention_mask=batch_dict["attention_mask"].to(device)
         else:
             text = batch_dict["text"]
             encoded = tokenizer(
@@ -177,13 +137,14 @@ def evaluate(
                 encoded["input_ids"], tokenizer, mlm_probability=args.mlm_prob
             )
             inputs, labels = inputs.to(device), labels.to(device)
+            attention_mask=encoded["attention_mask"].to(device)
 
         # forward
         output = model(
             video=video,
             video_mask=video_mask,
             input_ids=inputs,
-            attention_mask=encoded["attention_mask"].to(device),
+            attention_mask=attention_mask,
             labels=labels,
         )
         loss = output["loss"]
@@ -239,7 +200,7 @@ def main(args):
     # Set up dataloaders
     if not args.eval:
         if "minedojo" in args.combine_datasets:
-            dataset_train, minedojo_dataset_val = build_minedojo_videotext_dataset(args, tokenizer)
+            dataset_train, minedojo_dataset_val, collate_fn = build_minedojo_videotext_dataset(args, tokenizer)
             sampler_train = (
                 DistributedSampler(dataset_train)
                 if args.distributed
@@ -251,7 +212,7 @@ def main(args):
             dataloader_train = DataLoader(
                 dataset_train,
                 batch_sampler=batch_sampler_train,
-                collate_fn=minedojo_videotext_collate_fn,
+                collate_fn=collate_fn,
                 num_workers=args.num_workers,
             )
         elif "webvid" in args.combine_datasets:
@@ -290,7 +251,7 @@ def main(args):
             minedojo_dataset_val,
             batch_size=args.batch_size_val,
             sampler=minedojo_sampler_val,
-            collate_fn=minedojo_videotext_collate_fn,
+            collate_fn=collate_fn,
             num_workers=args.num_workers,
         )
         tuples.append(nt(dataset_name="minedojo", dataloader=minedojo_dataloader_val))

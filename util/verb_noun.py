@@ -1,5 +1,5 @@
 
-MINECRAFT_OBJECTS = [
+MINECRAFT_NOUNS = {
     # materials
     "wood", "woods", "pickaxe", "axe", "dirt", "dirts", "cobblestone", "cobblestones", "cobble", "plank", "planks", 
     "stone", "stones", "sand", "ore", "plank", "planks", "water", "bucket", "waterbucket",
@@ -11,35 +11,16 @@ MINECRAFT_OBJECTS = [
     # make waterfall
     "bucket", "waterfall", "water", "river", "empty",
     # build animal pen
-    "pen", "fence", "animal", "villange",
+    "pen", "fence", "animal", "village",
     # build house
     "house", "door", "window", "floor", "ground", "brick",
 
     # misc
     "nothing", "else", "tower", "hill", "mountain",
     "some", "a", "an", "the", "one", "two", "three",
-]
-
-VERB_NOUN_PAIRS = {
-    "move": ["left", "right", "forward", "backward"],
-    "run": [],
-    "turn": ["left", "right"],
-    "jump": [],
-    "climb": [],
-    "get": MINECRAFT_OBJECTS,
-    "make": [],
-    "use": [],
-    "build": [],
-    "craft": [],
-    "see": [],
-    "find": [],
-    "dig": [],
-    # "watch": [],
-
-    "dig": [],
 }
 
-VERB_PHASE = {
+MINECRAFT_VERBS = {
     "move": ["moved", "moving"],
     "run": ["ran", "running"],
     "turn": ["turned", "turning"],
@@ -55,17 +36,20 @@ VERB_PHASE = {
     "dig": ["digged", "digging"],
     "swim": ["swam", "swimming"],
     "watch": ["watched", "watching"],
+    "stand": ["stood", "standing"],
 }
 
-ALL_WORDS = set()
-for verb, nouns in VERB_NOUN_PAIRS.items():
-    ALL_WORDS.add(verb)
-    for noun in nouns:
-        ALL_WORDS.add(noun)
-for verb, phases in VERB_PHASE.items():
-    for phase in phases:
-        ALL_WORDS.add(phase)
+# all nouns
+ALL_NOUNS = set(MINECRAFT_NOUNS)
 
-ALL_ACTIONS = set(
-    ["move", "jump", "swim", "climb", "stand"]
-)
+# all verbs
+ALL_VERBS = set()
+for key, value in MINECRAFT_VERBS.items():
+    ALL_VERBS.add(key)
+    [ALL_VERBS.add(word) for word in value]
+
+# all actions
+ALL_ACTIONS = {"move", "jump", "swim", "climb", "stand"}
+
+# all words
+ALL_WORDS = set.union(ALL_NOUNS, ALL_VERBS, ALL_ACTIONS)

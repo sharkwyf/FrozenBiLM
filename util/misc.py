@@ -3,38 +3,19 @@ from typing import Tuple, List
 import random
 
 
-def mask_split_texts(inputs, tokenizer, mlm_probabilities):
+def mask_minedojo_tokens(inputs, tokenizer, mlm_probability, special_ids=None):
     """
     Prepare masked tokens inputs/labels for masked language modeling: 80% MASK, 10% random, 10% original.
     """
+
     if tokenizer.mask_token is None:
         raise ValueError(
             "This tokenizer does not have a mask token which is necessary for masked language modeling. Remove the --mlm flag if you want to use this tokenizer."
         )
 
-    input_ids = []
-    lengths = []
-    for i in range(len(inputs)):
-        text, prob = inputs[i], mlm_probabilities[i]
-        encoded = tokenizer(
-            text,
-            add_special_tokens=False,
-            # max_length=args.max_tokens,
-            padding="longest",
-            # truncation=True,
-            return_tensors="np",
-            return_length=True,
-        )
-        input_ids.append(encoded["input_ids"])
-        lengths.append(encoded["length"])
-        print("help")
-    import numpy as np
-    input_ids = np.concatenate(input_ids)
-
-
     labels = inputs.clone()
     # We sample a few tokens in each sequence for masked-LM training (with probability args.mlm_probability defaults to 0.15 in Bert/RoBERTa)
-    probability_matrix = torch.full(labels.shape, mlm_probabilities)
+    probability_matrix = torch.full(labels.shape, mlm_probability)
     special_tokens_mask = [
         tokenizer.get_special_tokens_mask(val, already_has_special_tokens=True)
         for val in labels.tolist()
@@ -45,6 +26,13 @@ def mask_split_texts(inputs, tokenizer, mlm_probabilities):
     if tokenizer._pad_token is not None:
         padding_mask = labels.eq(tokenizer.pad_token_id)
         probability_matrix.masked_fill_(padding_mask, value=0.0)
+    if special_ids is not None:
+        for ids, prob in special_ids.values():
+            id_masks = torch.zeros(probability_matrix.shape, dtype=torch.bool)
+            for id in ids:
+                id_masks |= labels.eq(id)
+            probability_matrix.masked_fill_(id_masks, value=prob)
+
     masked_indices = torch.bernoulli(probability_matrix).bool()
     labels[~masked_indices] = -100  # We only compute loss on masked tokens
 

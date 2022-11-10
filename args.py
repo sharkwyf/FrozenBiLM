@@ -53,12 +53,21 @@ def get_args_parser():
         nargs="+",
         default=[0., 0.15, 0.],
         type=float,
+        help="mask probs of pre, in, post texts",
+    )
+    parser.add_argument(
+        "--word_mask_probs",
+        nargs="+",
+        default=[0.15, 1.0],
+        type=float,
+        help="mask probs of nouns, verbs",
     )
     parser.add_argument(
         "--minedojo_loss_weights",
         nargs="+",
         default=[0, 1, 0],
         type=float,
+        help="loss weight of pre, in, post texts",
     )
 
     # Dataset specific

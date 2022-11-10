@@ -4,12 +4,17 @@ import pandas as pd
 import numpy as np
 import os
 import json
+from functools import partial
 from torch.multiprocessing import Manager, Queue
 from util.pertrel_oss_helper import init_clients
+from util.misc import mask_minedojo_tokens
+from util.verb_noun import ALL_NOUNS, ALL_VERBS
 
 
 class Minedojo_VideoText_Dataset(Dataset):
-    def __init__(self, tokenizer, features_path, *, max_feats=16, features_dim=768, text_start=-40, text_end=24, vid_start=-8, vid_end=8, n_process=8):
+    def __init__(self, tokenizer, features_path, *, max_feats=16, features_dim=768,
+        text_start=-40, text_end=24, vid_start=-8, vid_end=8, n_process=8,
+        mask_noun_prob=0.15, mask_verb_prob=0.15):
         # with open(video_index_file) as f:
         #     self.video_indices = json.load(f)
         self._tokenizer = tokenizer
@@ -29,6 +34,14 @@ class Minedojo_VideoText_Dataset(Dataset):
         self._text_end = text_end
         self._vid_start = vid_start
         self._vid_end = vid_end
+        self._noun_ids = [ids[0] for ids in tokenizer(list(ALL_NOUNS), add_special_tokens=False)["input_ids"]]
+        self._verb_ids =  [ids[0] for ids in tokenizer(list(ALL_VERBS), add_special_tokens=False)["input_ids"]]
+        print("nouns:", sorted(tokenizer.batch_decode(self._noun_ids)))
+        print("verbs:", sorted(tokenizer.batch_decode(self._verb_ids)))
+        self._special_ids = {
+            "nouns": (self._noun_ids, mask_noun_prob),
+            "verbs": (self._verb_ids, mask_verb_prob),
+        }
         
 
     def __len__(self):
@@ -42,13 +55,15 @@ class Minedojo_VideoText_Dataset(Dataset):
 
         # process texts
         masked = (self._text_start < starts) & (starts <= self._text_end)
-        pre_masked = starts <= self._vid_start
-        in_masked = (self._vid_start < starts) & (starts <= self._vid_end)
-        post_masked = self._vid_end < starts
-
-        pre_text = " ".join(words[masked & pre_masked])
-        in_text = " ".join(words[masked & in_masked])
-        post_text = " ".join(words[masked & post_masked])
+        # pre_masked = starts <= self._vid_start
+        # in_masked = (self._vid_start < starts) & (starts <= self._vid_end)
+        # post_masked = self._vid_end < starts
+        # noun_masks = np.zeros(words.shape, dtype=bool)
+        # verb_masks = np.zeros(words.shape, dtype=bool)
+        # for noun in self._keyword_nouns:
+        #     noun_masks |= words == noun
+        # for verb in self._keyword_verbs:
+        #     verb_masks |= words == verb
 
         # process videos
         try:
@@ -73,24 +88,37 @@ class Minedojo_VideoText_Dataset(Dataset):
             video = th.zeros(self._max_feats, self._features_dim)
             video_len = 0
 
-        return {"video": video, "video_len": video_len, "pre_text": pre_text, "in_text": in_text, "post_text": post_text}
+        return {"video": video, "video_len": video_len, "words": words[masked]}
 
 
-def minedojo_videotext_collate_fn(tokenizer, batch):
-    bs = len(batch)
-    video = th.stack([batch[i]["video"] for i in range(bs)])
-    video_len = th.tensor([batch[i]["video_len"] for i in range(bs)], dtype=th.long)
-    pre_text = [batch[i]["pre_text"] for i in range(bs)]
-    in_text = [batch[i]["in_text"] for i in range(bs)]
-    post_text = [batch[i]["post_text"] for i in range(bs)]
+    def minedojo_videotext_collate_fn(self, args, batch):
+        bs = len(batch)
+        video = th.stack([batch[i]["video"] for i in range(bs)])
+        video_len = th.tensor([batch[i]["video_len"] for i in range(bs)], dtype=th.long)
+        texts = [" ".join(batch[i]["words"]) for i in range(bs)]
 
-    return {
-        "video": video,
-        "video_len": video_len,
-        "pre_text": pre_text,
-        "in_text": in_text,
-        "post_text": post_text,
-    }
+        encoded = self._tokenizer(
+            texts,
+            add_special_tokens=True,
+            max_length=args.max_tokens,
+            padding="longest",
+            truncation=True,
+            return_tensors="pt",
+        )
+        inputs, labels = mask_minedojo_tokens(
+            encoded["input_ids"],
+            self._tokenizer,
+            mlm_probability=args.minedojo_mask_probs[1], 
+            special_ids=self._special_ids
+        )
+
+        return {
+            "video": video,
+            "video_len": video_len,
+            "inputs": inputs,
+            "labels": labels,
+            "attention_mask": encoded["attention_mask"]
+        }
 
 
 def build_minedojo_videotext_dataset(args, tokenizer):
@@ -103,8 +131,10 @@ def build_minedojo_videotext_dataset(args, tokenizer):
         text_end=args.minedojo_text_end,
         vid_start=args.minedojo_vid_start,
         vid_end=args.minedojo_vid_end,
+        mask_noun_prob=args.word_mask_probs[0],
+        mask_verb_prob=args.word_mask_probs[1],
     )
     train_size = int(len(full_dataset) * 0.9)
     test_size = len(full_dataset) - train_size
     train_dataset, test_dataset = random_split(full_dataset, [train_size, test_size], generator=th.Generator().manual_seed(42))
-    return train_dataset, test_dataset
+    return train_dataset, test_dataset, partial(full_dataset.minedojo_videotext_collate_fn, args)
