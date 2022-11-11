@@ -5,7 +5,7 @@ MINECRAFT_NOUNS = {
     "stone", "stones", "sand", "ore", "plank", "planks", "water", "bucket", "waterbucket",
     # objects
     "pig", "cow", "sheep", "horse", "bee", "bug", "rabbit", "wolf", "dog", "cat",
-    "sky", "tree", "trees", "grass",
+    "sky", "tree", "trees", "grass", "rock",
     # find cave
     "cave", "road", "path", "torch", "stick", "coal",
     # make waterfall
@@ -17,26 +17,79 @@ MINECRAFT_NOUNS = {
 
     # misc
     "nothing", "else", "tower", "hill", "mountain",
-    "some", "a", "an", "the", "one", "two", "three",
+    "some", "a", "an", "one", "two", "three",
 }
 
 MINECRAFT_VERBS = {
+    # movement
     "move": ["moved", "moving"],
+    "walk": ["walked", "walking"],
     "run": ["ran", "running"],
-    "turn": ["turned", "turning"],
+    "sneak": ["snuck", "sneaking"],
+    "sprint": ["sprinted", "sprinting"],
+    "dash": ["dashed", "dashing"],
+    "trip": ["tripped", "tripping"],
     "jump": ["jumped", "jumping"],
     "climb": ["climbed", "climbing"],
-    "get": ["got", "getting"],
-    "make": ["made", "making"],
-    "use": ["used", "using"],
-    "build": ["built", "building"],
-    "craft": ["crafted", "crafting"],
-    "see": ["saw", "seeing"],
-    "find": ["found", "finding"],
-    "dig": ["digged", "digging"],
-    "swim": ["swam", "swimming"],
-    "watch": ["watched", "watching"],
+    "turn": ["turned", "turning"],
     "stand": ["stood", "standing"],
+    "find": ["found", "finding"],
+    "swim": ["swam", "swimming"],
+    "ride": ["rode", "ridden"],
+    "fly": ["flew", "flown"],
+    
+    # consume
+    "make": ["made", "making"],
+    "build": ["built", "building"],
+    "create": ["created", "creating"],
+    "craft": ["crafted", "crafting"],
+    "smelt": ["smelted", "smelting"],
+    "place": ["place", "placing"],
+    "put": ["put", "putting"],
+    "give": ["gave", "giving"],
+    "drop": ["dropped", "dropping"],
+    "remove": ["removed", "removing"],
+    "eat": ["ate", "eating"],
+
+    # gain
+    "get": ["got", "getting"],
+    "gather": ["gathered", "gathering"],
+    "take": ["took", "taking"],
+    "collect": ["collected", "collecting"],
+    "pick": ["picked", "picking"],
+    "dig": ["digged", "digging"],
+    "chop": ["chopped", "chopping"],
+    "cut": ["cut", "cutting"],
+    "mine": ["mined", "mining"],
+    "loot": ["looted", "looting"],
+    "break": ["broke", "broking"],
+    
+    # interacte
+    "use": ["used", "using"],
+    "add": ["added", "adding"],
+    "cook": ["cooked", "cooking"],
+    "open": ["opened", "opening"],
+    "kill": ["killed", "killing"],
+    "beat": ["beat", "beating"],
+    "hunt": ["hunted", "hunting"],
+    "farm": ["farmed", "farming"],
+    "drag": ["dragged", "dragging"],
+    "throw": ["threw", "throwing"],
+    "fight": ["fought", "fighting"],
+    "attack": ["attacked", "attacking"],
+    "equip": ["equipped", "equipping"],
+    "wear": ["wore", "wearing"],
+    "click": ["clicked", "clicking"],
+    "heat": ["heated", "heating"],
+    "grow": ["grew", "growing"],
+
+    # other
+    "watch": ["watched", "watching"],
+    "see": ["saw", "seeing"],
+    "look": ["looked", "looking"],
+    "locate": ["located", "locating"],
+    "search": ["searched", "searching"],
+    "explore": ["explored", "exploring"],
 }
 
 # all nouns
@@ -48,8 +101,6 @@ for key, value in MINECRAFT_VERBS.items():
     ALL_VERBS.add(key)
     [ALL_VERBS.add(word) for word in value]
 
-# all actions
-ALL_ACTIONS = {"move", "jump", "swim", "climb", "stand"}
 
 # all words
-ALL_WORDS = set.union(ALL_NOUNS, ALL_VERBS, ALL_ACTIONS)
+ALL_WORDS = set.union(ALL_NOUNS, ALL_VERBS)

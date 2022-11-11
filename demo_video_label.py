@@ -12,12 +12,12 @@ import time
 import json
 import datetime
 import argparse
+from tqdm import tqdm
 from torch.utils.data import DataLoader, DistributedSampler
 from collections import namedtuple
 from queue import PriorityQueue, Queue
 from pathlib import Path
 
-from datasets import build_videotext_dataset, videotext_collate_fn, build_minedojo_videotext_dataset, minedojo_videotext_collate_fn
 from model import build_model, get_tokenizer
 from util.misc import get_mask, mask_tokens, adjust_learning_rate
 from util import dist
@@ -25,7 +25,7 @@ from util.metrics import MetricLogger
 from args import get_args_parser
 from model.mineclip import MineCLIP, utils as U
 from util.misc import get_mask, mask_tokens, adjust_learning_rate
-from util.verb_noun import VERB_NOUN_PAIRS, VERB_PHASE, ALL_WORDS
+from util.verb_noun import ALL_WORDS
 
 
 """
@@ -87,7 +87,7 @@ def main(args):
     resized_frames = np.stack(resized_frames)
     cap.release()
 
-    result = cv2.VideoWriter(f"{args.output_dir}{Path(args.video_path).stem}_{Path(args.load).stem}_w{args.answer_bias_weight}.avi",
+    result = cv2.VideoWriter(f"{args.output_dir}{Path(args.video_path).stem}_{Path(args.load).stem}_t{args.n_frames // args.frames_per_second}_w{args.answer_bias_weight}_label.avi",
         cv2.VideoWriter_fourcc(*'MJPG'),
         frame_rate, size)
     font = cv2.FONT_HERSHEY_SIMPLEX
@@ -105,31 +105,31 @@ def main(args):
     texts = [
 
         # Animals
-        # "I found a [mask] [mask] [mask]",
-        # "I found a [mask] [mask] now",
-        # "what's the animal, for now, there is a [MASK] over there",
-        # "what's the animal, for now, there is a [MASK] afront of me",
-        # "what's the animal, for now, there is a [MASK] in front of me",
-        # "what's the animal, for now, there is a [MASK] before me",
-        # "for now, a [MASK] is looking at me",
-        # "for now, a [MASK] is staring at me",
+        "I found a [mask] [mask] [mask]",
+        "I found a [mask] [mask] now",
+        "what's the animal, for now, there is a [MASK] over there",
+        "what's the animal, for now, there is a [MASK] afront of me",
+        "what's the animal, for now, there is a [MASK] in front of me",
+        "what's the animal, for now, there is a [MASK] before me",
+        "for now, a [MASK] is looking at me",
+        "for now, a [MASK] is staring at me",
 
         # Waterfall
-        "I am in the [MASK] biome",
-        "I just made a [MASK] [MASK] [MASK] successfully",
-        "I just found a [MASK] [MASK] [MASK] successfully",
-        "in minecraft. I'm [MASK] [MASK] [MASK] right now.",
-        "what I'm doing in minecraft now is I'm [MASK] [MASK] [MASK] right now.",
-        "what am I doing in minecraft now? to be clear, I'm [MASK] [MASK] [MASK] right now.",
-        "to be clear, I'm [MASK] [MASK] [MASK] right now successfully.",
-        "what I was doing in minecraft is I was [MASK] [MASK] [MASK] successfully.",
-        "what was I doing in minecraft? I was [MASK] [MASK] [MASK] successfully.",
-        "in minecraft, I was [MASK] [MASK] [MASK] successfully in the past few seconds.",
-        "what I just did in minecraft is I [MASK] [MASK] [MASK] successfully.",
-        "what did I just do in minecraft? I just [MASK] [MASK] [MASK] successfully.",
-        "in minecraft, I just [MASK] [MASK] [MASK] successfully in the past few seconds.",
-        "what I have just done in minecraft is I have just [MASK] [MASK] [MASK] successfully.",
-        "in minecraft, I have just [MASK] [MASK] [MASK] in the past few seconds.",
+        # "I am in the [MASK] biome",
+        # "I just made a [MASK] [MASK] [MASK] successfully",
+        # "I just found a [MASK] [MASK] [MASK] successfully",
+        # "in minecraft. I'm [MASK] [MASK] [MASK] right now.",
+        # "what I'm doing in minecraft now is I'm [MASK] [MASK] [MASK] right now.",
+        # "what am I doing in minecraft now? to be clear, I'm [MASK] [MASK] [MASK] right now.",
+        # "to be clear, I'm [MASK] [MASK] [MASK] right now successfully.",
+        # "what I was doing in minecraft is I was [MASK] [MASK] [MASK] successfully.",
+        # "what was I doing in minecraft? I was [MASK] [MASK] [MASK] successfully.",
+        # "in minecraft, I was [MASK] [MASK] [MASK] successfully in the past few seconds.",
+        # "what I just did in minecraft is I [MASK] [MASK] [MASK] successfully.",
+        # "what did I just do in minecraft? I just [MASK] [MASK] [MASK] successfully.",
+        # "in minecraft, I just [MASK] [MASK] [MASK] successfully in the past few seconds.",
+        # "what I have just done in minecraft is I have just [MASK] [MASK] [MASK] successfully.",
+        # "in minecraft, I have just [MASK] [MASK] [MASK] in the past few seconds.",
         # Objects
         
         # Common
@@ -145,7 +145,7 @@ def main(args):
     step = 0
     texts = [t.lower().replace(",", " ").replace(".", " ").replace("?", " ").replace("[mask]", "[MASK]") for t in texts]
     rt = [t for t in texts]
-    for i in range(len(frames)):
+    for i in tqdm(range(len(frames))):
         i - sample_rate * args.n_frames
         if (i - sample_rate * args.n_frames) >= 0 and (i - sample_rate * args.n_frames) % (args.sample_interval * frame_rate) == 0:
             print (i, "/", len(frames), "[", (i - sample_rate * args.n_frames) // sample_rate,  i // sample_rate, "]")
@@ -207,9 +207,9 @@ if __name__ == "__main__":
     parser.add_argument("--video_path", default="./data/Minedojo/demo.mp4", type=str)
     parser.add_argument("--output_dir", default="./data/Minedojo/", type=str)
     parser.add_argument("--model_path", default="./data/Minedojo/attn.pth", type=str)
-    parser.add_argument("--frames_per_second", default=2, type=int)
+    parser.add_argument("--frames_per_second", default=4, type=int)
     parser.add_argument("--n_frames", default=16, type=int)
-    parser.add_argument("--answer_bias_weight", default=100, type=float)
+    parser.add_argument("--answer_bias_weight", default=0, type=float)
     parser.add_argument("--sample_interval", default=5, type=int)
     args = parser.parse_args()
     args.model_name = os.path.join(os.environ["TRANSFORMERS_CACHE"], args.model_name)

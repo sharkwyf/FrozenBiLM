@@ -120,7 +120,7 @@ if __name__ == '__main__':
     parser.add_argument('--output_path', type=str, default='s3://minedojo/trans/test/')
     parser.add_argument('--vid_suffix', type=str, default=".mp4")
     parser.add_argument('--vtt_suffix', type=str, default=".en.vtt")
-    parser.add_argument('--n_process', type=int, default=2)
+    parser.add_argument('--n_process', type=int, default=mp.cpu_count())
     # video
     parser.add_argument('--vid_start', type=float, default=-8, help="start of video clip ")
     parser.add_argument('--vid_end', type=float, default=8)
@@ -130,10 +130,12 @@ if __name__ == '__main__':
     # caption
     parser.add_argument('--cap_start', type=float, default=-40)
     parser.add_argument('--cap_end', type=float, default=24)
+    # multi machines
+    parser.add_argument('--world_size', type=int, default=1)
+    parser.add_argument('--rank', type=int, default=0)
     args = parser.parse_args()
     print(args)
     print(f"total cpu counts: {mp.cpu_count()}")
-    np.random.seed(43)
 
     with open(args.video_index_file) as f:
         video_indices = json.load(f)
@@ -151,9 +153,12 @@ if __name__ == '__main__':
     for keyword, items in video_indices.items():
         if keyword in []:
             pass
-        if args.max_clips_per_keyword < len(items):
-            np.random.shuffle(items)
-        for vid_id, word_start, word_len in items[:min(args.max_clips_per_keyword, len(items))]:
+        np.random.seed(43)
+        np.random.shuffle(items)
+        total_len = min(args.max_clips_per_keyword, len(items))
+        low = args.rank * total_len // args.world_size
+        high = (args.rank + 1) * total_len // args.world_size - 1
+        for vid_id, word_start, word_len in items[low:high + 1]:
             if f"{vid_id}{args.vid_suffix}" in files and f"{vid_id}{args.vtt_suffix}" in files:
                 if f"{vid_id}_{word_start:02}" not in downloaded_indices:
                     if vid_id not in videos:

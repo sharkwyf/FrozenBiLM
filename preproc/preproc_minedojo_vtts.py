@@ -17,6 +17,7 @@ import sys
 workdir = os.path.join(os.path.dirname(__file__), '..')
 sys.path.insert(0, workdir)
 from util.pertrel_oss_helper import init_clients
+from util.verb_noun import ALL_VERBS
 
 
 """
@@ -24,7 +25,14 @@ Load VTT files and annotate clip ranges
 """
 def load_keywords(path):
     with open(path) as json_file:
-        return json.load(json_file)
+        data = json.load(json_file)
+        for verb in ALL_VERBS:
+            if verb not in data:
+                data[verb] = {
+                    "include": [verb],
+                    "exclude": []
+                }
+        return data
 
 def process(captions):
     ret = []
@@ -108,7 +116,7 @@ if __name__ == "__main__":
     parser.add_argument('--vtt_suffix', type=str, default=".en.vtt")
     parser.add_argument('--min_word_interval', type=float, default=0.1)
     parser.add_argument('--min_clip_interval', type=float, default=16)
-    parser.add_argument('--n_process', type=int, default=2)
+    parser.add_argument('--n_process', type=int, default=mp.cpu_count())
     args = parser.parse_args()
     print(args)
     print(f"total cpu counts: {mp.cpu_count()}")

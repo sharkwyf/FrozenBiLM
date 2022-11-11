@@ -17,7 +17,6 @@ from collections import namedtuple
 from queue import PriorityQueue, Queue
 from pathlib import Path
 
-from datasets import build_videotext_dataset, videotext_collate_fn, build_minedojo_videotext_dataset, minedojo_videotext_collate_fn
 from model import build_model, get_tokenizer
 from util.misc import get_mask, mask_tokens, adjust_learning_rate
 from util import dist
@@ -25,7 +24,7 @@ from util.metrics import MetricLogger
 from args import get_args_parser
 from model.mineclip import MineCLIP, utils as U
 from util.misc import get_mask, mask_tokens, adjust_learning_rate
-from util.verb_noun import VERB_NOUN_PAIRS, VERB_PHASE, ALL_WORDS
+from util.verb_noun import ALL_WORDS
 
 
 """
