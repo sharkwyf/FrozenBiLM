@@ -112,19 +112,19 @@ if __name__ == "__main__":
 
     # load clip indices & models
     clients = init_clients(1)
-    print("fetching nbz indices")
+    print("fetching clip nbz indices")
     files = set(clients[0].list(args.input_path))
     # files = set(["-7OrkmVmS38_199.09.nbz", "-7OrkmVmS38_199.09.txt", "-7NkbSPZMLY_872.14.nbz", "-7NkbSPZMLY_872.14.txt"])
     print(f"loaded {len(files)} files")
 
-    print("fetching extracted indices")
-    # downloaded_indices = set([x[:-4] for x in clients[0].list(args.output_path)])
-    downloaded_indices = set()
-    print(f"loaded {len(downloaded_indices)} downloaded indices")
+    print("fetching extracted feature indices")
+    downloaded_indices = set([x[:-4] for x in clients[0].list(args.output_path)])
+    # downloaded_indices = set()
+    print(f"loaded {len(downloaded_indices)} downloaded feature indices")
 
     # load clip indices to download
     indices = []
-    for file in files:
+    for file in sorted(files):
         if not file.endswith(".nbz"):
             continue
         if f"{file[:-4]}.txt" in files and file[:-4] not in downloaded_indices:

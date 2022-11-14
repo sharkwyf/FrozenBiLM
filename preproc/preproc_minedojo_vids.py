@@ -1,13 +1,9 @@
 import sys
-import torch
 import json
 import os
 import cv2
 import numpy as np
-import webvtt
-from io import StringIO
 import bisect
-import io
 import copy
 import time
 import math
@@ -156,16 +152,19 @@ if __name__ == '__main__':
         np.random.seed(43)
         np.random.shuffle(items)
         total_len = min(args.max_clips_per_keyword, len(items))
-        low = args.rank * total_len // args.world_size
-        high = (args.rank + 1) * total_len // args.world_size - 1
-        for vid_id, word_start, word_len in items[low:high + 1]:
+        for vid_id, word_start, word_len in items[:total_len]:
             if f"{vid_id}{args.vid_suffix}" in files and f"{vid_id}{args.vtt_suffix}" in files:
                 if f"{vid_id}_{word_start:02}" not in downloaded_indices:
                     if vid_id not in videos:
                         videos[vid_id] = set()
                     videos[vid_id].add(word_start)
-    inputs = [(args, k, v) for k, v in videos.items()]
+
+    inputs = sorted([(args, k, v) for k, v in videos.items()])
+    low = args.rank * len(inputs) // args.world_size
+    high = (args.rank + 1) * len(inputs) // args.world_size
     print(f"max clips per keyword: {args.max_clips_per_keyword}, total clips: {sum([len(v) for _, _, v in inputs])}")
+    inputs = inputs[low:high]
+    print(f"rank: {args.rank + 1}/{args.world_size}, current clips: {sum([len(v) for _, _, v in inputs])}")
 
     with Pool(processes=args.n_process) as pool:
         results = list(tqdm(

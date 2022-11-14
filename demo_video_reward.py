@@ -87,7 +87,16 @@ def main(args):
     resized_frames = np.stack(resized_frames)
     cap.release()
 
-    result = cv2.VideoWriter(f"{args.output_dir}{Path(args.video_path).stem}_{Path(args.load).stem}_{args.stack}_t{args.n_frames // args.frames_per_second}_w{args.answer_bias_weight}_rew.avi",
+    result = cv2.VideoWriter(
+        "{}{}_{}_ckpt{}_{}_t{}_b{}_reward.avi".format(
+            args.output_dir,
+            Path(args.video_path).stem,
+            "_".join(args.load.split('/')[-3:-1]),
+            Path(args.load).stem[-2:],
+            args.stack,
+            args.n_frames // args.frames_per_second,
+            args.answer_bias_weight
+        ),
         cv2.VideoWriter_fourcc(*'MJPG'),
         frame_rate, size)
     font = cv2.FONT_HERSHEY_SIMPLEX
@@ -142,42 +151,43 @@ def main(args):
             print(i, "/", len(frames), "[", (i - sample_rate * args.n_frames) // sample_rate,  i // sample_rate, "]")
 
             # calculate prob bias
-            # if args.stack == "mean":
-            #     video = features[:, (i - sample_rate * args.n_frames) // sample_rate: i // sample_rate]
-            #     origin_shape = video.shape
-            #     video = video.mean(dim=1)
-            #     video = video.broadcast_to(origin_shape)
-            # elif args.stack == "first":
-            #     video = features[:, (i - sample_rate * args.n_frames) // sample_rate: (i - sample_rate * args.n_frames) // sample_rate + 1]
-            #     video = video.broadcast_to([video.shape[0], video.shape[1] * args.n_frames, video.shape[2]])
-            # video_len = torch.tensor(video.size(1), device=device)
-            # video_mask = get_mask(video_len, video.size(1)).to(device)
-            # for num, (encoded, answer_ids) in enumerate(encodeds):
-            #     input_ids = encoded["input_ids"].clone().to(device)
-            #     word_idx = 0
-            #     while True:
-            #         indices = ((input_ids[0] == tokenizer.mask_token_id) * torch.arange(input_ids.shape[1], device=device)).nonzero()
-            #         if len(indices) == 0:
-            #             break
-            #         min_idx = indices[0]
+            if args.stack != "none":
+                if args.stack == "mean":
+                    video = features[:, (i - sample_rate * args.n_frames) // sample_rate: i // sample_rate]
+                    origin_shape = video.shape
+                    video = video.mean(dim=1)
+                    video = video.broadcast_to(origin_shape)
+                elif args.stack == "first":
+                    video = features[:, (i - sample_rate * args.n_frames) // sample_rate: (i - sample_rate * args.n_frames) // sample_rate + 1]
+                    video = video.broadcast_to([video.shape[0], video.shape[1] * args.n_frames, video.shape[2]])
+                video_len = torch.tensor(video.size(1), device=device)
+                video_mask = get_mask(video_len, video.size(1)).to(device)
+                for num, (encoded, answer_ids) in enumerate(encodeds):
+                    input_ids = encoded["input_ids"].clone().to(device)
+                    word_idx = 0
+                    while True:
+                        indices = ((input_ids[0] == tokenizer.mask_token_id) * torch.arange(input_ids.shape[1], device=device)).nonzero()
+                        if len(indices) == 0:
+                            break
+                        min_idx = indices[0]
 
-            #         # forward
-            #         output = model(
-            #             video=video,
-            #             video_mask=video_mask,
-            #             input_ids=input_ids,
-            #             attention_mask=encoded["attention_mask"].to(device),
-            #         )
-            #         logits = output.logits[:,video_len:,:len(answer_bias)] + answer_bias
-            #         encoded_output = logits.argmax(dim=2)
-                    
-            #         # print("bias", logits.softmax(dim=-1)[:, min_idx, answer_id])
-            #         bias_rews[num] = logits.softmax(dim=-1)[:, min_idx, answer_ids[word_idx]].item()
+                        # forward
+                        output = model(
+                            video=video,
+                            video_mask=video_mask,
+                            input_ids=input_ids,
+                            attention_mask=encoded["attention_mask"].to(device),
+                        )
+                        logits = output.logits[:,video_len:,:len(answer_bias)] + answer_bias
+                        encoded_output = logits.argmax(dim=2)
+                        
+                        # print("bias", logits.softmax(dim=-1)[:, min_idx, answer_id])
+                        bias_rews[num] = logits.softmax(dim=-1)[:, min_idx, answer_ids[word_idx]].item()
 
-            #         # generate one word at a time
-            #         input_ids[0][min_idx] = encoded_output[0][min_idx]
-            #         # print(min_idx, input_ids)
-            #         word_idx += 1
+                        # generate one word at a time
+                        input_ids[0][min_idx] = encoded_output[0][min_idx]
+                        # print(min_idx, input_ids)
+                        word_idx += 1
 
 
             # calculate rewards
@@ -239,7 +249,7 @@ if __name__ == "__main__":
     parser.add_argument("--model_path", default="./data/Minedojo/attn.pth", type=str)
     parser.add_argument("--frames_per_second", default=4, type=int)
     parser.add_argument("--n_frames", default=16, type=int)
-    parser.add_argument("--stack", default=["first", "mean"][0], type=str)
+    parser.add_argument("--stack", default=["none", "first", "mean"][0], type=str)
     parser.add_argument("--answer_bias_weight", default=0, type=float)
     parser.add_argument("--sample_interval", default=1, type=int)
     args = parser.parse_args()

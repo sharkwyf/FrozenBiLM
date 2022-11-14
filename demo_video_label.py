@@ -87,7 +87,15 @@ def main(args):
     resized_frames = np.stack(resized_frames)
     cap.release()
 
-    result = cv2.VideoWriter(f"{args.output_dir}{Path(args.video_path).stem}_{Path(args.load).stem}_t{args.n_frames // args.frames_per_second}_w{args.answer_bias_weight}_label.avi",
+    result = cv2.VideoWriter(
+        "{}{}_{}_ckpt{}_t{}_b{}_label.avi".format(
+            args.output_dir,
+            Path(args.video_path).stem,
+            "_".join(args.load.split('/')[-3:-1]),
+            Path(args.load).stem[-2:],
+            args.n_frames // args.frames_per_second,
+            args.answer_bias_weight
+        ),
         cv2.VideoWriter_fourcc(*'MJPG'),
         frame_rate, size)
     font = cv2.FONT_HERSHEY_SIMPLEX
@@ -105,31 +113,31 @@ def main(args):
     texts = [
 
         # Animals
-        "I found a [mask] [mask] [mask]",
-        "I found a [mask] [mask] now",
-        "what's the animal, for now, there is a [MASK] over there",
-        "what's the animal, for now, there is a [MASK] afront of me",
-        "what's the animal, for now, there is a [MASK] in front of me",
-        "what's the animal, for now, there is a [MASK] before me",
-        "for now, a [MASK] is looking at me",
-        "for now, a [MASK] is staring at me",
+        # "I found a [mask] [mask] [mask]",
+        # "I found a [mask] [mask] now",
+        # "what's the animal, for now, there is a [MASK] over there",
+        # "what's the animal, for now, there is a [MASK] afront of me",
+        # "what's the animal, for now, there is a [MASK] in front of me",
+        # "what's the animal, for now, there is a [MASK] before me",
+        # "for now, a [MASK] is looking at me",
+        # "for now, a [MASK] is staring at me",
 
         # Waterfall
-        # "I am in the [MASK] biome",
-        # "I just made a [MASK] [MASK] [MASK] successfully",
-        # "I just found a [MASK] [MASK] [MASK] successfully",
-        # "in minecraft. I'm [MASK] [MASK] [MASK] right now.",
-        # "what I'm doing in minecraft now is I'm [MASK] [MASK] [MASK] right now.",
-        # "what am I doing in minecraft now? to be clear, I'm [MASK] [MASK] [MASK] right now.",
-        # "to be clear, I'm [MASK] [MASK] [MASK] right now successfully.",
-        # "what I was doing in minecraft is I was [MASK] [MASK] [MASK] successfully.",
-        # "what was I doing in minecraft? I was [MASK] [MASK] [MASK] successfully.",
-        # "in minecraft, I was [MASK] [MASK] [MASK] successfully in the past few seconds.",
-        # "what I just did in minecraft is I [MASK] [MASK] [MASK] successfully.",
-        # "what did I just do in minecraft? I just [MASK] [MASK] [MASK] successfully.",
-        # "in minecraft, I just [MASK] [MASK] [MASK] successfully in the past few seconds.",
-        # "what I have just done in minecraft is I have just [MASK] [MASK] [MASK] successfully.",
-        # "in minecraft, I have just [MASK] [MASK] [MASK] in the past few seconds.",
+        "I am in the [MASK] biome",
+        "I just made a [MASK] [MASK] [MASK] successfully",
+        "I just found a [MASK] [MASK] [MASK] successfully",
+        "in minecraft. I'm [MASK] [MASK] [MASK] right now.",
+        "what I'm doing in minecraft now is I'm [MASK] [MASK] [MASK] right now.",
+        "what am I doing in minecraft now? to be clear, I'm [MASK] [MASK] [MASK] right now.",
+        "to be clear, I'm [MASK] [MASK] [MASK] right now successfully.",
+        "what I was doing in minecraft is I was [MASK] [MASK] [MASK] successfully.",
+        "what was I doing in minecraft? I was [MASK] [MASK] [MASK] successfully.",
+        "in minecraft, I was [MASK] [MASK] [MASK] successfully in the past few seconds.",
+        "what I just did in minecraft is I [MASK] [MASK] [MASK] successfully.",
+        "what did I just do in minecraft? I just [MASK] [MASK] [MASK] successfully.",
+        "in minecraft, I just [MASK] [MASK] [MASK] successfully in the past few seconds.",
+        "what I have just done in minecraft is I have just [MASK] [MASK] [MASK] successfully.",
+        "in minecraft, I have just [MASK] [MASK] [MASK] in the past few seconds.",
         # Objects
         
         # Common
