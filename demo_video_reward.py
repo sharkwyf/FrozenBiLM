@@ -1,39 +1,23 @@
-import math
-import sys
 import os
 import torch
 import torch.nn
 import torch.optim
 import numpy as np
-import random
 import cv2
-import kornia
-import time
-import json
-import datetime
 import argparse
-from torch.utils.data import DataLoader, DistributedSampler
-from collections import namedtuple
-from queue import PriorityQueue, Queue
 from pathlib import Path
 
 from tqdm import tqdm
 from model import build_model, get_tokenizer
-from util.misc import get_mask, mask_tokens, adjust_learning_rate
-from util import dist
-from util.metrics import MetricLogger
 from args import get_args_parser
 from model.mineclip import MineCLIP, utils as U
-from util.misc import get_mask, mask_tokens, adjust_learning_rate
+from util.misc import get_mask
 from util.verb_noun import ALL_VERBS
 
 
 """
 Label intentions given a video 
 """
-def resize_frames(frames, resolution):
-    return kornia.geometry.transform.resize(frames, resolution).clamp(0.0, 255.0)
-
 @torch.no_grad()
 def main(args):
     device = torch.device("cuda") if torch.cuda.is_available() else "cpu"
@@ -110,17 +94,18 @@ def main(args):
     features = torch.from_numpy(features).float().unsqueeze(0)
     print("len of features: ", features.shape, "dtype: ", features.dtype)
 
-    ["move", "jump", "swim", "climb", "stand"]
     texts = [
-        ("move", "i [mask] [mask] ", ["move", "forward"]),
-        ("jump", "i [mask]", ["jump"]),
-        ("climb", "i [mask]", ["climb"]),
-        ("swim", "i [mask]", ["swim"]),
-        ("stand", "i [mask]", ["stand"]),
-        ("craft", "i [mask]", ["craft"]),
-        ("build", "i [mask] [mask]", ["build", "house"]),
-        ("place", "i [mask] [mask]", ["place", "block"]),
-        ("dig", "i [mask] [mask]", ["dig", "dirt"]),
+        ("run", "i [mask] forward ", ["run"]),
+        ("stand", "i [mask] here", ["stand"]),
+        ("jump", "i [mask] up", ["jump"]),
+        ("climb", "i [mask] up", ["climb"]),
+        ("swim", "i [mask]", ["swimm"]),
+        ("build", "i [mask] house", ["build"]),
+        ("place", "i [mask] a block", ["place"]),
+        ("attack", "i [mask]", ["attack"]),
+        ("mine", "i [mask] blocks", ["mine"]),
+        ("chop", "i [mask] blocks", ["chop"]),
+        ("watch", "i [mask] before", ["watch"]),
     ]
     step = 0
     for i in range(len(texts)):
@@ -223,7 +208,20 @@ def main(args):
                     word_idx += 1
                 rews[num] = 1 / np.sum(1 / np.array(probs))
             step += 1
-                
+            
+        if i - (args.n_frames // 2) >= 0:   
+            for j, item in enumerate(texts):
+                display, text, answer = item
+                cv2.putText(frames[i - (args.n_frames // 2)], 
+                    "{}: {}, {:.3f}".format(step, display, (rews[j] - bias_rews[j]) * 100000), 
+                    (50, 20 + 30 * j), 
+                    font, 0.6, 
+                    (0, 255, 255), 
+                    2, 
+                    cv2.LINE_4)
+            result.write(frames[i - (args.n_frames // 2)])
+
+    for i in range(i - (args.n_frames // 2), len(frames)):
         for j, item in enumerate(texts):
             display, text, answer = item
             cv2.putText(frames[i], 
@@ -234,6 +232,7 @@ def main(args):
                 2, 
                 cv2.LINE_4)
         result.write(frames[i])
+            
 
     # release the cap object
     result.release()

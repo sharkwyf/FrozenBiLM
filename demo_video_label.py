@@ -1,39 +1,23 @@
-import math
-import sys
 import os
 import torch
 import torch.nn
 import torch.optim
 import numpy as np
-import random
 import cv2
-import kornia
-import time
-import json
-import datetime
 import argparse
-from tqdm import tqdm
-from torch.utils.data import DataLoader, DistributedSampler
-from collections import namedtuple
-from queue import PriorityQueue, Queue
 from pathlib import Path
 
+from tqdm import tqdm
 from model import build_model, get_tokenizer
-from util.misc import get_mask, mask_tokens, adjust_learning_rate
-from util import dist
-from util.metrics import MetricLogger
 from args import get_args_parser
 from model.mineclip import MineCLIP, utils as U
-from util.misc import get_mask, mask_tokens, adjust_learning_rate
+from util.misc import get_mask
 from util.verb_noun import ALL_WORDS
 
 
 """
 Label intentions given a video 
 """
-def resize_frames(frames, resolution):
-    return kornia.geometry.transform.resize(frames, resolution).clamp(0.0, 255.0)
-
 @torch.no_grad()
 def main(args):
     device = torch.device("cuda") if torch.cuda.is_available() else "cpu"
@@ -154,7 +138,6 @@ def main(args):
     texts = [t.lower().replace(",", " ").replace(".", " ").replace("?", " ").replace("[mask]", "[MASK]") for t in texts]
     rt = [t for t in texts]
     for i in tqdm(range(len(frames))):
-        i - sample_rate * args.n_frames
         if (i - sample_rate * args.n_frames) >= 0 and (i - sample_rate * args.n_frames) % (args.sample_interval * frame_rate) == 0:
             print (i, "/", len(frames), "[", (i - sample_rate * args.n_frames) // sample_rate,  i // sample_rate, "]")
             video = features[:, (i - sample_rate * args.n_frames) // sample_rate: i // sample_rate]
@@ -192,7 +175,19 @@ def main(args):
                 rt[num] = tokenizer.batch_decode(input_ids[:, 1:-1])[0]
             print("\n".join(rt))
             step += 1
-                
+             
+        if i - (args.n_frames // 2) >= 0:   
+            for j, text in enumerate(rt):
+                cv2.putText(frames[i - (args.n_frames // 2)], 
+                    "{}: {}".format(step, text), 
+                    (50, 20 + 30 * j), 
+                    font, 0.6, 
+                    (0, 255, 255), 
+                    2, 
+                    cv2.LINE_4)
+            result.write(frames[i - (args.n_frames // 2)])
+
+    for i in range(i - (args.n_frames // 2), len(frames)):
         for j, text in enumerate(rt):
             cv2.putText(frames[i], 
                 "{}: {}".format(step, text), 
@@ -202,6 +197,7 @@ def main(args):
                 2, 
                 cv2.LINE_4)
         result.write(frames[i])
+
 
     # release the cap object
     result.release()
@@ -218,7 +214,7 @@ if __name__ == "__main__":
     parser.add_argument("--frames_per_second", default=4, type=int)
     parser.add_argument("--n_frames", default=16, type=int)
     parser.add_argument("--answer_bias_weight", default=0, type=float)
-    parser.add_argument("--sample_interval", default=5, type=int)
+    parser.add_argument("--sample_interval", default=4, type=int)
     args = parser.parse_args()
     args.model_name = os.path.join(os.environ["TRANSFORMERS_CACHE"], args.model_name)
     main(args)

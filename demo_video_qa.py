@@ -1,38 +1,23 @@
-import math
-import sys
 import os
 import torch
 import torch.nn
 import torch.optim
 import numpy as np
-import random
 import cv2
-import kornia
-import time
-import json
-import datetime
 import argparse
-from torch.utils.data import DataLoader, DistributedSampler
-from collections import namedtuple
-from queue import PriorityQueue, Queue
 from pathlib import Path
 
+from tqdm import tqdm
 from model import build_model, get_tokenizer
-from util.misc import get_mask, mask_tokens, adjust_learning_rate
-from util import dist
-from util.metrics import MetricLogger
 from args import get_args_parser
 from model.mineclip import MineCLIP, utils as U
-from util.misc import get_mask, mask_tokens, adjust_learning_rate
+from util.misc import get_mask
 from util.verb_noun import ALL_WORDS
 
 
 """
 Label intentions given a video 
 """
-def resize_frames(frames, resolution):
-    return kornia.geometry.transform.resize(frames, resolution).clamp(0.0, 255.0)
-
 @torch.no_grad()
 def main(args):
     device = torch.device("cuda") if torch.cuda.is_available() else "cpu"

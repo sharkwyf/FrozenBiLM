@@ -3,13 +3,15 @@ import bz2
 import cv2
 import numpy as np
 import glob
+import math
 from io import BytesIO
+from tqdm import tqdm
 
 if __name__ == '__main__':
     path = "/mnt/nfs/wangyuanfu/data/*.nbz"
     out_path = "/mnt/nfs/wangyuanfu/data/"
     lens = []
-    for name in glob.glob(path):
+    for name in tqdm(glob.glob(path)):
         print(name)
         # load text
         txt_path = name[:-4] + ".txt"
@@ -26,7 +28,7 @@ if __name__ == '__main__':
                     "end": np.array([float(x[1])for x in splits], dtype=np.float16),
                     "word": np.array([x[2]for x in splits]),
                 }
-                masked = (captions["start"] >= -8) & (captions["start"] <= 8)
+                masked = (captions["start"] >= -2) & (captions["start"] <= 2)
                 lens.append(sum(masked))
                 text = " ".join(captions["word"][masked])
                 if lens[-1] > 30:
@@ -44,12 +46,12 @@ if __name__ == '__main__':
             4, frames.shape[1:3][::-1])
         font = cv2.FONT_HERSHEY_SIMPLEX
         for frame in frames:
-            interval = 25
-            for i in range(len(text) // interval):
+            interval = 28
+            for i in range(math.ceil(len(text) / interval)):
                 cv2.putText(frame, 
                     "{}".format(text[i * interval : (i + 1) * interval]), 
-                    (10, 10 + 20 * i), 
-                    font, 0.6, 
+                    (10, 15 + 20 * i), 
+                    font, 0.5, 
                     (0, 255, 255), 
                     1, 
                     cv2.LINE_4)

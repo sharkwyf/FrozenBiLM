@@ -63,6 +63,7 @@ MINECRAFT_VERBS = {
     "mine": ["mined", "mining"],
     "loot": ["looted", "looting"],
     "break": ["broke", "broking"],
+    "destroy": ["destroyed", "destroying"],
     
     # interacte
     "use": ["used", "using"],
@@ -84,6 +85,7 @@ MINECRAFT_VERBS = {
     "grow": ["grew", "growing"],
 
     # other
+    "think": ["thought", "thinking"],
     "watch": ["watched", "watching"],
     "see": ["saw", "seeing"],
     "look": ["looked", "looking"],
@@ -104,3 +106,13 @@ for key, value in MINECRAFT_VERBS.items():
 
 # all words
 ALL_WORDS = set.union(ALL_NOUNS, ALL_VERBS)
+
+
+# verb keywords
+KW_VERBS = {}
+for verb, (past, present) in MINECRAFT_VERBS.items():
+    if verb not in KW_VERBS:
+        KW_VERBS[verb] = {
+            "include": [f"i'm {present}", f"am {present}", f"was {present}", f"just {present}", f"i {past}", f"just {past}"],
+            "exclude": []
+        }

@@ -6,5 +6,5 @@ unset HTTPS_PROXY
 python preproc/preproc_minedojo_vtts.py \
     --input_path="s3://minedojo/videos/" \
     --keyword_path="/FrozenBiLM/data/Minedojo/keywords.json" \
-    --output_path="/FrozenBiLM/data/Minedojo/minedojo_clips_v2.json" \
+    --output_path="/FrozenBiLM/data/Minedojo/minedojo_clips_v3.json" \
     # --n_process=128 \

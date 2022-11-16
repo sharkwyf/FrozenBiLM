@@ -17,7 +17,7 @@ import sys
 workdir = os.path.join(os.path.dirname(__file__), '..')
 sys.path.insert(0, workdir)
 from util.pertrel_oss_helper import init_clients
-from util.verb_noun import ALL_VERBS
+from util.verb_noun import KW_VERBS
 
 
 """
@@ -26,12 +26,7 @@ Load VTT files and annotate clip ranges
 def load_keywords(path):
     with open(path) as json_file:
         data = json.load(json_file)
-        for verb in ALL_VERBS:
-            if verb not in data:
-                data[verb] = {
-                    "include": [verb],
-                    "exclude": []
-                }
+        data.update(KW_VERBS)
         return data
 
 def process(captions):
