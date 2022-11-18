@@ -141,3 +141,4 @@ data/
 transformers_cache/
 output/
 repo/
+wandb/

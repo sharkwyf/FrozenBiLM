@@ -10,6 +10,7 @@ import time
 import json
 import datetime
 import argparse
+import wandb
 from torch.utils.data import DataLoader, DistributedSampler
 from collections import namedtuple
 
@@ -18,7 +19,9 @@ from model import build_model, get_tokenizer
 from util.misc import get_mask, mask_tokens, adjust_learning_rate
 from util import dist
 from util.metrics import MetricLogger
+from util.verb_noun import ALL_WORDS
 from args import get_args_parser
+from benchmark_eval import benchmark_evaluate
 
 
 def train_one_epoch(
@@ -179,7 +182,7 @@ def main(args):
     torch.manual_seed(seed)
     np.random.seed(seed)
     random.seed(seed)
-
+    
     # Build model
     model = build_model(args)
     model.to(device)
@@ -196,6 +199,19 @@ def main(args):
         betas=(args.beta1, args.beta2),
         weight_decay=args.weight_decay,
     )
+
+    # Set up logger
+    if dist.is_main_process():
+        wandb.init(project="FrozenBiLM", sync_tensorboard=False)
+        wandb.log(vars(args))
+
+    # Set up benchmark evaluator
+    features = np.load(args.feature_path, allow_pickle=True).item()
+    answer_id = tokenizer.encode(["▁" + w for w in list(ALL_WORDS)])[1:-1]
+    answer_bias = torch.zeros(tokenizer.vocab_size, dtype=torch.float32, device=device)
+    answer_bias += args.answer_bias_weight
+    for id in answer_id:
+        answer_bias[id] = 0
 
     # Set up dataloaders
     if not args.eval:
@@ -297,8 +313,21 @@ def main(args):
                 {item.dataset_name + "_" + k: v for k, v in curr_val_stats.items()}
             )
 
+        # benchmark test
+        if dist.is_main_process():
+            benchmark_stats = benchmark_evaluate(
+                model=model,
+                tokenizer=tokenizer,
+                data=features,
+                answer_bias=answer_bias,
+                device=device,
+            )
+        else:
+            benchmark_stats = {}
+
         log_stats = {
             **{f"val_{k}": v for k, v in val_stats.items()},
+            **{f"benchmark_{k}": v for k, v in benchmark_stats.items()},
             "epoch": args.start_epoch,
             "n_parameters": n_parameters,
         }
@@ -307,6 +336,7 @@ def main(args):
             json.dump(
                 log_stats, open(os.path.join(args.save_dir, "log_stats.json"), "w")
             )
+            wandb.log(log_stats)
         return
 
     # Run training and evaluates after every --eval_skip epochs
@@ -358,9 +388,22 @@ def main(args):
         else:
             val_stats = {}
 
+        # benchmark test
+        if dist.is_main_process():
+            benchmark_stats = benchmark_evaluate(
+                model=model,
+                tokenizer=tokenizer,
+                data=features,
+                answer_bias=answer_bias,
+                device=device,
+            )
+        else:
+            benchmark_stats = {}
+
         log_stats = {
             **{f"train_{k}": v for k, v in train_stats.items()},
             **{f"val_{k}": v for k, v in val_stats.items()},
+            **{f"benchmark_{k}": v for k, v in benchmark_stats.items()},
             "epoch": epoch,
             "n_parameters": n_parameters,
         }
@@ -368,6 +411,7 @@ def main(args):
         if args.save_dir and dist.is_main_process():
             with open(os.path.join(args.save_dir, "log.txt"), "a") as f:
                 f.write(json.dumps(log_stats) + "\n")
+            wandb.log(log_stats)
 
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
@@ -376,6 +420,8 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(parents=[get_args_parser()])
+    parser.add_argument("--feature_path", default="./data/Minedojo/benchmarks/features.npy", type=str)
+    parser.add_argument("--answer_bias_weight", default=0, type=float)
     args = parser.parse_args()
     if args.save_dir:
         args.save_dir = os.path.join(args.presave_dir, args.save_dir)

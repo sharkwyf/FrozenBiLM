@@ -2,7 +2,7 @@
 MINECRAFT_NOUNS = {
     # materials
     "wood", "woods", "pickaxe", "axe", "dirt", "dirts", "cobblestone", "cobblestones", "cobble", "plank", "planks", 
-    "stone", "stones", "sand", "ore", "plank", "planks", "water", "bucket", "waterbucket",
+    "stone", "stones", "sand", "ore", "plank", "planks", "water", "bucket", "waterbucket", "lava",
     # objects
     "pig", "cow", "sheep", "horse", "bee", "bug", "rabbit", "wolf", "dog", "cat",
     "sky", "tree", "trees", "grass", "rock",
@@ -57,7 +57,7 @@ MINECRAFT_VERBS = {
     "take": ["took", "taking"],
     "collect": ["collected", "collecting"],
     "pick": ["picked", "picking"],
-    "dig": ["digged", "digging"],
+    "dig": ["dug", "digging"],
     "chop": ["chopped", "chopping"],
     "cut": ["cut", "cutting"],
     "mine": ["mined", "mining"],
