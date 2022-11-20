@@ -38,6 +38,7 @@ def main(args):
     # load frozenbilm model
     model = build_model(args)
     model.to(device)
+    model.eval()
     tokenizer = get_tokenizer(args)
 
     # encoded available words

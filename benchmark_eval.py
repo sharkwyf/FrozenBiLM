@@ -12,7 +12,7 @@ from model import build_model, get_tokenizer
 from args import get_args_parser
 from model.mineclip import MineCLIP, utils as U
 from util.misc import get_mask
-from util.verb_noun import ALL_WORDS, MINECRAFT_VERBS
+from util.verb_noun import ALL_WORDS, MINECRAFT_VERBS, ALL_NOUNS, ALL_VERBS
 
 
 
@@ -20,7 +20,7 @@ from util.verb_noun import ALL_WORDS, MINECRAFT_VERBS
 Benchmark Nouns and Verbs Recoginition
 """
 @torch.no_grad()
-def benchmark_evaluate(model, tokenizer, data, answer_bias, device="cpu"):
+def benchmark_evaluate(model, tokenizer, data, answer_bias_dict, args, device="cpu"):
 # questions
     questions = {
         "nouns": [
@@ -29,13 +29,15 @@ def benchmark_evaluate(model, tokenizer, data, answer_bias, device="cpu"):
             ("i'm watching the [MASK]", ""),
             ("i'm looking at the [MASK]", ""),
             ("the [MASK] is before me", ""),
+            ("the [MASK] is in front of me", ""),
         ],
         "verbs": [
             ("i am [MASK]", "present"),
             ("i am just [MASK]", "present"),
             ("i was [MASK]", "present"),
-            ("i was just [MASK]", "past"),
-            ("what i did is i just [MASK]", "past"),
+            ("i was just [MASK]", "present"),
+            ("what i'm doing is i'm just [MASK]", "present"),
+            ("what i was doing is i was just [MASK]", "present"),
         ],
     }
 
@@ -44,6 +46,7 @@ def benchmark_evaluate(model, tokenizer, data, answer_bias, device="cpu"):
     for type, items in data.items():
         print("evaluating", type)
 
+        answer_bias = answer_bias_dict[type]
         texts = [tokenizer(
             question,
             add_special_tokens=True,
@@ -56,6 +59,7 @@ def benchmark_evaluate(model, tokenizer, data, answer_bias, device="cpu"):
             # print(key)
             result[type][key] = []
             for video in features:
+                video = video.to(device)
                 video_len = torch.tensor(video.size(1), device=device)
                 video_mask = get_mask(video_len, video.size(1)).to(device)
 
@@ -91,7 +95,7 @@ def benchmark_evaluate(model, tokenizer, data, answer_bias, device="cpu"):
                     # generate one word at a time
                     prediction = tokenizer.decode(encoded_output[0, min_idx])
                     prob = logits.softmax(dim=2)[0, min_idx, key_id]
-                    result[type][key].append((answer, prediction, prediction == key, prob))
+                    result[type][key].append((answer, prediction, prediction == answer, prob))
                 pass
     
     info = {}
@@ -126,14 +130,18 @@ def main(args):
     # load frozenbilm model
     model = build_model(args)
     model.to(device)
+    model.eval()
     tokenizer = get_tokenizer(args)
 
     # encoded available words
-    answer_id = tokenizer.encode(["▁" + w for w in list(ALL_WORDS)])[1:-1]
-    answer_bias = torch.zeros(tokenizer.vocab_size, dtype=torch.float32, device=device)
-    answer_bias += args.answer_bias_weight
-    for id in answer_id:
-        answer_bias[id] = 0
+    answer_bias_dict = {}
+    for type, words in [("nouns", ALL_NOUNS), ("verbs", ALL_VERBS)]:
+        answer_id = tokenizer.encode(["▁" + w for w in list(words)])[1:-1]
+        answer_bias = torch.zeros(tokenizer.vocab_size, dtype=torch.float32, device=device)
+        answer_bias += args.answer_bias_weight
+        for id in answer_id:
+            answer_bias[id] = 0
+        answer_bias_dict[type] = answer_bias
 
     # Load pretrained checkpoint
     if args.load:
@@ -144,7 +152,7 @@ def main(args):
     # Load benchmark features
     data = np.load(args.feature_path, allow_pickle=True).item()
     
-    benchmark_evaluate(model, tokenizer, data, answer_bias, device)
+    benchmark_evaluate(model, tokenizer, data, answer_bias_dict, args, device)
 
 
 if __name__ == "__main__":

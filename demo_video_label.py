@@ -38,6 +38,7 @@ def main(args):
     # load frozenbilm model
     model = build_model(args)
     model.to(device)
+    model.eval()
     tokenizer = get_tokenizer(args)
 
     # encoded available words
@@ -122,7 +123,21 @@ def main(args):
         "in minecraft, I just [MASK] [MASK] [MASK] successfully in the past few seconds.",
         "what I have just done in minecraft is I have just [MASK] [MASK] [MASK] successfully.",
         "in minecraft, I have just [MASK] [MASK] [MASK] in the past few seconds.",
-        # Objects
+
+        # Actions
+        # "i'm [mask] successfully now",
+        # "i'm [mask] [mask] successfully now",
+        # "i'm [mask] [mask] [mask] successfully now",
+        # "i just [mask] successfully now",
+        # "i just [mask] [mask] successfully now",
+        # "i just [mask] [mask] [mask] successfully now",
+        # "i [mask] successfully now",
+        # "i [mask] [mask] successfully now",
+        # "i [mask] [mask] [mask] successfully now",
+        # "the action i'm taking is i'm [mask] successfully now",
+        # "the action i'm just taking is i'm just [mask] successfully now",
+        # "the action i took is i [mask] successfully now",
+        # "the action i just took is i just [mask] successfully now",
         
         # Common
         "I see [MASK] [MASK] afront of me now, and there is [MASK] [MASK] besides that.",

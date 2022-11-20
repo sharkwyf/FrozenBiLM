@@ -19,7 +19,7 @@ from model import build_model, get_tokenizer
 from util.misc import get_mask, mask_tokens, adjust_learning_rate
 from util import dist
 from util.metrics import MetricLogger
-from util.verb_noun import ALL_WORDS
+from util.verb_noun import ALL_WORDS, ALL_NOUNS, ALL_VERBS
 from args import get_args_parser
 from benchmark_eval import benchmark_evaluate
 
@@ -202,16 +202,19 @@ def main(args):
 
     # Set up logger
     if dist.is_main_process():
-        wandb.init(project="FrozenBiLM", sync_tensorboard=False)
-        wandb.log(vars(args))
+        wandb.init(project="FrozenBiLM", config=vars(args), sync_tensorboard=False)
 
     # Set up benchmark evaluator
     features = np.load(args.feature_path, allow_pickle=True).item()
-    answer_id = tokenizer.encode(["▁" + w for w in list(ALL_WORDS)])[1:-1]
-    answer_bias = torch.zeros(tokenizer.vocab_size, dtype=torch.float32, device=device)
-    answer_bias += args.answer_bias_weight
-    for id in answer_id:
-        answer_bias[id] = 0
+    # encoded available words
+    answer_bias_dict = {}
+    for type, words in [("nouns", ALL_NOUNS), ("verbs", ALL_VERBS)]:
+        answer_id = tokenizer.encode(["▁" + w for w in list(words)])[1:-1]
+        answer_bias = torch.zeros(tokenizer.vocab_size, dtype=torch.float32, device=device)
+        answer_bias += args.answer_bias_weight
+        for id in answer_id:
+            answer_bias[id] = 0
+        answer_bias_dict[type] = answer_bias
 
     # Set up dataloaders
     if not args.eval:
@@ -257,7 +260,8 @@ def main(args):
 
     tuples = []
     if "minedojo" in args.combine_datasets_val:
-        # minedojo_dataset_val = build_minedojo_videotext_dataset("val", args)
+        if args.eval:
+            _, minedojo_dataset_val, collate_fn = build_minedojo_videotext_dataset(args, tokenizer)
         minedojo_sampler_val = (
             DistributedSampler(minedojo_dataset_val, shuffle=False)
             if args.distributed
@@ -315,11 +319,13 @@ def main(args):
 
         # benchmark test
         if dist.is_main_process():
+            model.eval()
             benchmark_stats = benchmark_evaluate(
                 model=model,
                 tokenizer=tokenizer,
                 data=features,
-                answer_bias=answer_bias,
+                answer_bias_dict=answer_bias_dict,
+                args=args,
                 device=device,
             )
         else:
@@ -390,11 +396,13 @@ def main(args):
 
         # benchmark test
         if dist.is_main_process():
+            model.eval()
             benchmark_stats = benchmark_evaluate(
                 model=model,
                 tokenizer=tokenizer,
                 data=features,
-                answer_bias=answer_bias,
+                answer_bias_dict=answer_bias_dict,
+                args=args,
                 device=device,
             )
         else:
@@ -421,7 +429,7 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(parents=[get_args_parser()])
     parser.add_argument("--feature_path", default="./data/Minedojo/benchmarks/features.npy", type=str)
-    parser.add_argument("--answer_bias_weight", default=0, type=float)
+    parser.add_argument("--answer_bias_weight", default=-100, type=float)
     args = parser.parse_args()
     if args.save_dir:
         args.save_dir = os.path.join(args.presave_dir, args.save_dir)
