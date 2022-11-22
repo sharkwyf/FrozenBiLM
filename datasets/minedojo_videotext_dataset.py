@@ -30,9 +30,9 @@ class Minedojo_VideoText_Dataset(Dataset):
         self._features_path = features_path
         self._max_feats = max_feats
         self._features_dim = features_dim
-        self._text_min_range = text_max_range if text_min_range is None else text_min_range
+        self._text_min_range = text_min_range
         self._text_max_range = text_max_range
-        self._vid_min_range = vid_max_range if vid_min_range is None else vid_min_range
+        self._vid_min_range = vid_min_range
         self._vid_max_range = vid_max_range
         self._noun_ids = [ids[0] for ids in tokenizer(list(ALL_NOUNS), add_special_tokens=False)["input_ids"]]
         self._verb_ids =  [ids[0] for ids in tokenizer(list(ALL_VERBS), add_special_tokens=False)["input_ids"]]
@@ -53,10 +53,10 @@ class Minedojo_VideoText_Dataset(Dataset):
         self._available_clt_indices.put(clt_idx)
         frames, words, starts, lens = data["feats"], data["words"], data["starts"], data["lens"]
 
-        sample_text_start = np.random.uniform(low=self._text_max_range[0], high=self._text_min_range[0])
-        sample_text_end = np.random.uniform(low=self._text_min_range[1], high=self._text_max_range[1])
-        sample_vid_start = np.random.uniform(low=self._vid_max_range[0], high=self._vid_min_range[0])
-        sample_vid_end = np.random.uniform(low=self._vid_min_range[1], high=self._vid_max_range[1])
+        sample_text_start = np.random.uniform(*self._text_min_range)
+        sample_text_end = np.random.uniform(*self._text_max_range)
+        sample_vid_start = np.random.uniform(*self._vid_min_range)
+        sample_vid_end = np.random.uniform(*self._vid_max_range)
 
         # process texts
         masked = (sample_text_start < starts) & (starts <= sample_text_end)

@@ -28,9 +28,10 @@ python -m torch.distributed.launch --nproc_per_node 8 --use_env main.py \
     --minedojo_features_path=s3://minedojo/feats/v2/15000/ \
     --epochs=40 \
     --eval_skip=4 \
-    --minedojo_text_max_range -2 2 \
-    --minedojo_vid_min_range -2 2 \
-    --minedojo_vid_max_range -4 4 \
+    --minedojo_text_min_range -2 -2 \
+    --minedojo_text_max_range 2 2 \
+    --minedojo_vid_min_range -4 -2 \
+    --minedojo_vid_max_range 2 4 \
     --word_mask_probs 0.15 0.15 \
     --save_dir=/FrozenBiLM/output/v2/v48t4_n15v15 \
     --load=/FrozenBiLM/checkpoints/frozenbilm.pth \
