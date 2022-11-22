@@ -320,7 +320,7 @@ def main(args):
         # benchmark test
         if dist.is_main_process():
             model.eval()
-            benchmark_stats = benchmark_evaluate(
+            benchmark_stats, _ = benchmark_evaluate(
                 model=model,
                 tokenizer=tokenizer,
                 data=features,
@@ -397,7 +397,7 @@ def main(args):
         # benchmark test
         if dist.is_main_process():
             model.eval()
-            benchmark_stats = benchmark_evaluate(
+            benchmark_stats, _ = benchmark_evaluate(
                 model=model,
                 tokenizer=tokenizer,
                 data=features,

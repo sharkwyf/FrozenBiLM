@@ -33,19 +33,23 @@ def get_args_parser():
         default="s3://minedojo/feats/v1/",
     )
     parser.add_argument(
-        "--minedojo_text_start",
+        "--minedojo_text_min_range",
+        nargs="+",
         type=float,
     )
     parser.add_argument(
-        "--minedojo_text_end",
+        "--minedojo_text_max_range",
+        nargs="+",
         type=float,
     )
     parser.add_argument(
-        "--minedojo_vid_start",
+        "--minedojo_vid_min_range",
+        nargs="+",
         type=float,
     )
     parser.add_argument(
-        "--minedojo_vid_end",
+        "--minedojo_vid_max_range",
+        nargs="+",
         type=float,
     )
     parser.add_argument(

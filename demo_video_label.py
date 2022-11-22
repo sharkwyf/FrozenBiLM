@@ -34,6 +34,7 @@ def main(args):
     clip_model = MineCLIP(**clip_param).to(device)
     clip_model.load_ckpt(args.model_path, strict=True)
     clip_model.clip_model.vision_model.projection = None
+    clip_model.eval()
 
     # load frozenbilm model
     model = build_model(args)
@@ -226,7 +227,7 @@ if __name__ == "__main__":
     parser.add_argument("--video_path", default="./data/Minedojo/demo.mp4", type=str)
     parser.add_argument("--output_dir", default="./data/Minedojo/", type=str)
     parser.add_argument("--model_path", default="./data/Minedojo/attn.pth", type=str)
-    parser.add_argument("--frames_per_second", default=4, type=int)
+    parser.add_argument("--frames_per_second", default=2, type=int)
     parser.add_argument("--n_frames", default=16, type=int)
     parser.add_argument("--answer_bias_weight", default=0, type=float)
     parser.add_argument("--sample_interval", default=4, type=int)

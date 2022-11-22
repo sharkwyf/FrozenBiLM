@@ -6,9 +6,9 @@ export TRANSFORMERS_CACHE=./transformers_cache/
 
 VERSION=v2
 
-for RUN in v4t4_n15v15 # v4t4_n30v30 v4t4_n60v60 v6t4_n100v100 # v8t2_n100v100 # v4t4_n15v15 v4t4_n30v30 v4t4_n60v60 v6t4_n100v100    #
+for RUN in v6t4_n15v15 # v4t4_n30v30 v4t4_n60v60 v6t4_n100v100 # v8t2_n100v100 # v4t4_n15v15 v4t4_n30v30 v4t4_n60v60 v6t4_n100v100    #
 do
-    for ckpt in 19
+    for ckpt in 03 07 11 15 19 23 27 31 35 39
     do
         echo /$VERSION/$RUN/checkpoint00$ckpt.pth
         python benchmark_eval.py \

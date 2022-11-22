@@ -88,6 +88,7 @@ def main(args):
     clip_model = MineCLIP(**clip_param).to(device)
     clip_model.load_ckpt(args.model_path, strict=True)
     clip_model.clip_model.vision_model.projection = None
+    clip_model.eval()
 
     # load frozenbilm model
     model = build_model(args)

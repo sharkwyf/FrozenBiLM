@@ -31,6 +31,7 @@ def main(args):
     clip_model = MineCLIP(**clip_param).to(device)
     clip_model.load_ckpt(args.model_path, strict=True)
     clip_model.clip_model.vision_model.projection = None
+    clip_model.eval()
     
     types = ["nouns", "verbs"]
     result = { type: {} for type in types}
@@ -82,7 +83,7 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--video_dir", default="./workspace/FrozenBiLM/data/Minedojo/benchmarks/", type=str)
-    parser.add_argument("--output_path", default="./workspace/FrozenBiLM/data/Minedojo/features.npy", type=str)
+    parser.add_argument("--output_path", default="./workspace/FrozenBiLM/data/Minedojo/benchmarks/features.npy", type=str)
     parser.add_argument("--model_path", default="./workspace/FrozenBiLM/data/Minedojo/attn.pth", type=str)
     # parser.add_argument("--frames_per_second", default=4, type=int)
     parser.add_argument("--n_frames", default=16, type=int)

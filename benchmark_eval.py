@@ -20,8 +20,9 @@ from util.verb_noun import ALL_WORDS, MINECRAFT_VERBS, ALL_NOUNS, ALL_VERBS
 Benchmark Nouns and Verbs Recoginition
 """
 @torch.no_grad()
-def benchmark_evaluate(model, tokenizer, data, answer_bias_dict, args, device="cpu"):
-# questions
+def benchmark_evaluate(model, tokenizer, data, answer_bias_dict, args, questions=None, device="cpu"):
+    model.eval()
+    # questions
     questions = {
         "nouns": [
             ("i see the [MASK]", ""),
@@ -39,7 +40,7 @@ def benchmark_evaluate(model, tokenizer, data, answer_bias_dict, args, device="c
             ("what i'm doing is i'm just [MASK]", "present"),
             ("what i was doing is i was just [MASK]", "present"),
         ],
-    }
+    } if questions is None else questions
 
     # eval
     result = {type: {} for type in list(data.keys())}
@@ -121,7 +122,7 @@ def benchmark_evaluate(model, tokenizer, data, answer_bias_dict, args, device="c
         }
     
     print("Benchmark evalution done")
-    return ret
+    return ret, info
 
 @torch.no_grad()
 def main(args):
@@ -152,7 +153,7 @@ def main(args):
     # Load benchmark features
     data = np.load(args.feature_path, allow_pickle=True).item()
     
-    benchmark_evaluate(model, tokenizer, data, answer_bias_dict, args, device)
+    benchmark_evaluate(model, tokenizer, data, answer_bias_dict, args, device=device)
 
 
 if __name__ == "__main__":

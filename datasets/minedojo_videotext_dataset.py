@@ -13,8 +13,8 @@ from util.verb_noun import ALL_NOUNS, ALL_VERBS
 
 class Minedojo_VideoText_Dataset(Dataset):
     def __init__(self, tokenizer, features_path, *, max_feats=16, features_dim=768,
-        text_start=-40, text_end=24, vid_start=-8, vid_end=8, n_process=8,
-        mask_noun_prob=0.15, mask_verb_prob=0.15):
+        text_min_range=None, text_max_range=[], vid_min_range=None, vid_max_range=[], 
+        n_process=8, mask_noun_prob=0.15, mask_verb_prob=0.15):
         # with open(video_index_file) as f:
         #     self.video_indices = json.load(f)
         self._tokenizer = tokenizer
@@ -24,16 +24,16 @@ class Minedojo_VideoText_Dataset(Dataset):
             self._available_clt_indices.put(i)
         
         print(f"fetching data indices from {features_path}")
-        self.data = list(self._clients[0].list(features_path))
+        self.data = sorted(list(self._clients[0].list(features_path)))
         print(f"fetched {len(self.data)} indices")
 
         self._features_path = features_path
         self._max_feats = max_feats
         self._features_dim = features_dim
-        self._text_start = text_start
-        self._text_end = text_end
-        self._vid_start = vid_start
-        self._vid_end = vid_end
+        self._text_min_range = text_max_range if text_min_range is None else text_min_range
+        self._text_max_range = text_max_range
+        self._vid_min_range = vid_max_range if vid_min_range is None else vid_min_range
+        self._vid_max_range = vid_max_range
         self._noun_ids = [ids[0] for ids in tokenizer(list(ALL_NOUNS), add_special_tokens=False)["input_ids"]]
         self._verb_ids =  [ids[0] for ids in tokenizer(list(ALL_VERBS), add_special_tokens=False)["input_ids"]]
         print("nouns:", sorted(tokenizer.batch_decode(self._noun_ids)))
@@ -53,8 +53,13 @@ class Minedojo_VideoText_Dataset(Dataset):
         self._available_clt_indices.put(clt_idx)
         frames, words, starts, lens = data["feats"], data["words"], data["starts"], data["lens"]
 
+        sample_text_start = np.random.uniform(low=self._text_max_range[0], high=self._text_min_range[0])
+        sample_text_end = np.random.uniform(low=self._text_min_range[1], high=self._text_max_range[1])
+        sample_vid_start = np.random.uniform(low=self._vid_max_range[0], high=self._vid_min_range[0])
+        sample_vid_end = np.random.uniform(low=self._vid_min_range[1], high=self._vid_max_range[1])
+
         # process texts
-        masked = (self._text_start < starts) & (starts <= self._text_end)
+        masked = (sample_text_start < starts) & (starts <= sample_text_end)
         # pre_masked = starts <= self._vid_start
         # in_masked = (self._vid_start < starts) & (starts <= self._vid_end)
         # post_masked = self._vid_end < starts
@@ -68,11 +73,11 @@ class Minedojo_VideoText_Dataset(Dataset):
         # process videos
         try:
             video = th.from_numpy(frames).float()
-            start_idx, end_idx = int((self._vid_start + 8) * 4), int((self._vid_end + 8) * 4)
-            indices = sorted(np.random.choice(end_idx - start_idx - 2, self._max_feats - 2, replace=False) + start_idx + 1)
-            indices = [start_idx] + indices + [end_idx]
+            start_idx, end_idx = int((sample_vid_start + 8) * 4), int((sample_vid_end + 8) * 4)
             if len(video) > self._max_feats:
                 sampled = []
+                indices = sorted(np.random.choice(end_idx - start_idx - 2, self._max_feats - 2, replace=False) + start_idx + 1)
+                indices = [start_idx] + indices + [end_idx]
                 for j in indices:
                     sampled.append(video[j])
                 video = th.stack(sampled)
@@ -127,10 +132,10 @@ def build_minedojo_videotext_dataset(args, tokenizer):
         features_path=args.minedojo_features_path,
         max_feats=args.max_feats,
         features_dim=args.features_dim,
-        text_start=args.minedojo_text_start,
-        text_end=args.minedojo_text_end,
-        vid_start=args.minedojo_vid_start,
-        vid_end=args.minedojo_vid_end,
+        text_min_range=args.minedojo_text_min_range,
+        text_max_range=args.minedojo_text_max_range,
+        vid_min_range=args.minedojo_vid_min_range,
+        vid_max_range=args.minedojo_vid_max_range,
         mask_noun_prob=args.word_mask_probs[0],
         mask_verb_prob=args.word_mask_probs[1],
     )

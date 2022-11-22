@@ -1,3 +1,4 @@
+# Pretrain
 export http_proxy=http://10.1.8.5:32680/
 export https_proxy=http://10.1.8.5:32680/
 export HTTP_PROXY=http://10.1.8.5:32680/
@@ -27,12 +28,11 @@ python -m torch.distributed.launch --nproc_per_node 8 --use_env main.py \
     --minedojo_features_path=s3://minedojo/feats/v2/15000/ \
     --epochs=40 \
     --eval_skip=4 \
-    --minedojo_vid_start=-4 \
-    --minedojo_vid_end=2 \
-    --minedojo_text_start=-2 \
-    --minedojo_text_end=2 \
+    --minedojo_text_max_range -2 2 \
+    --minedojo_vid_min_range -2 2 \
+    --minedojo_vid_max_range -4 4 \
     --word_mask_probs 0.15 0.15 \
-    --save_dir=/FrozenBiLM/output/v2/v6t4_n15v15 \
+    --save_dir=/FrozenBiLM/output/v2/v48t4_n15v15 \
     --load=/FrozenBiLM/checkpoints/frozenbilm.pth \
-    # --load=/FrozenBiLM/output/v2/v4t4_n15v15/checkpoint0019.pth \
+    # --load=/FrozenBiLM/output/v2/v6t4_n15v15/checkpoint0019.pth \
     # --resume \
