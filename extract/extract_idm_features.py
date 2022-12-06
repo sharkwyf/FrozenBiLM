@@ -115,7 +115,7 @@ def upload(args, queue_features, done, lock):
     while True:
         try:
             [name, output] = queue_features.get()
-            client.save_nbz(f"{args.output_path}{name}.nbz", output)
+            client.save_nbz(f"{args.output_path}{name}{args.feats_suffix}", output)
             done.put(1)
         except Exception:
             print(traceback.format_exc())
@@ -129,7 +129,6 @@ if __name__ == '__main__':
     parser.add_argument('--output_path', type=str, default='s3://minedojo/idms/test/')
     parser.add_argument('--vid_suffix', type=str, default=".mp4")
     parser.add_argument('--feats_suffix', type=str, default=".nbz")
-    parser.add_argument('--n_process', type=int, default=mp.cpu_count())
     # idm
     parser.add_argument("--weights", type=str, default=os.path.join(workdir, "data/Minedojo/4x_idm.weights"), help="Path to the '.weights' file to be loaded.")
     parser.add_argument("--model", type=str, default=os.path.join(workdir, "data/Minedojo/4x_idm.model"), help="Path to the '.model' file to be loaded.")
@@ -140,13 +139,12 @@ if __name__ == '__main__':
     parser.add_argument('--resolution', type=int, nargs="+", default=[128, 128])
     parser.add_argument('--max_clips_per_keyword', type=int, default=math.inf)
     # multi machines
-    parser.add_argument('--world_size', type=int, default=2)
-    parser.add_argument('--rank', type=int, default=0)
-    #
     parser.add_argument("--n_downloader", default=1, type=int)
     parser.add_argument("--n_extractor", default=1, type=int)
     parser.add_argument("--n_uploader", default=1, type=int)
     parser.add_argument("--n_gpu", default=torch.cuda.device_count(), type=int)
+    parser.add_argument('--world_size', type=int, default=2)
+    parser.add_argument('--rank', type=int, default=0)
     args = parser.parse_args()
     print(args)
     print(f"total cpu counts: {mp.cpu_count()}")
@@ -154,13 +152,13 @@ if __name__ == '__main__':
     with open(args.video_index_file) as f:
         video_indices = json.load(f)
     
-    clients = init_clients(args.n_process)
+    client = init_clients(1)[0]
     print("fetching indices")
-    files = set(clients[0].list(args.input_path))
+    files = set(client.list(args.input_path))
     print(f"loaded {len(files)} files")
 
     print("fetching processed indices")
-    processed_indices = set([x[:-4] for x in clients[0].list(args.output_path)])
+    processed_indices = set([x[:-4] for x in client.list(args.output_path)])
     print(f"loaded {len(processed_indices)} processed indices")
 
     videos = {}
