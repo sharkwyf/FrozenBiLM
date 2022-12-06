@@ -55,6 +55,8 @@ def main(args):
                 ret, frame = cap.read()
                 if not ret:
                     break
+                # BGR -> RGB
+                frame = frame[..., ::-1]
                 if idx in indices:
                     resized_frames.append(cv2.resize(frame, resized))
             resized_frames = np.stack(resized_frames)

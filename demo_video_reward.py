@@ -91,6 +91,8 @@ def main(args):
         ret, frame = cap.read()
         if not ret:
             break
+        # BGR -> RGB
+        frame = frame[..., ::-1]
         frames.append(frame)
         resized_frames.append(cv2.resize(frame, resized))
     frames = np.stack(frames)

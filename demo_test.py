@@ -66,6 +66,8 @@ def main(args):
     for i in range(0, max_frame + 1):
         if i in frames_dict:
             ret, frame = cap.read()
+            # BGR -> RGB
+            frame = frame[..., ::-1]
             frames_dict[i] = cv2.resize(frame, resized)
         else:
             cap.grab()

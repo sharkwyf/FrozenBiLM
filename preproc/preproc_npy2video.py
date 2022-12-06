@@ -28,7 +28,7 @@ if __name__ == '__main__':
                     "end": np.array([float(x[1])for x in splits], dtype=np.float16),
                     "word": np.array([x[2]for x in splits]),
                 }
-                masked = (captions["start"] >= -2) & (captions["start"] <= 2)
+                masked = (captions["start"] >= -3) & (captions["start"] <= 3)
                 lens.append(sum(masked))
                 text = " ".join(captions["word"][masked])
                 if lens[-1] > 30:
@@ -55,7 +55,7 @@ if __name__ == '__main__':
                     (0, 255, 255), 
                     1, 
                     cv2.LINE_4)
-            result.write(frame)
+            result.write(frame[..., ::-1])
                 
         # release the cap object
         result.release()

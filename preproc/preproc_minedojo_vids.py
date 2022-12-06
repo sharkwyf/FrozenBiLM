@@ -77,7 +77,10 @@ def preprocess_minedojo_videotext_data(intput):
         for i in range(0, max_frame + 1):
             if i in frames_dict:
                 ret, frame = cap.read()
-                frames_dict[i] = cv2.resize(frame, args.resolution)
+                # BGR -> RGB
+                frame = frame[..., ::-1]
+                frame = cv2.resize(frame, args.resolution)
+                frames_dict[i] = frame
             else:
                 cap.grab()
 
