@@ -33,7 +33,7 @@ def init_idm_agent(model, weights, rank, n_gpu):
     return agent
 
 
-def download(args, queue_videos, videos):
+def download(args, queue_videos, done, videos):
     """
     Fetch video clips of interval [-32 + start, 96 + end], 128 + 16 * fps frames in total
     name: vid_id
@@ -44,6 +44,7 @@ def download(args, queue_videos, videos):
             # load video
             cap = client.load_video(f"{args.input_path}{vid_id}{args.vid_suffix}")
             fps, frame_count = cap.get(5), cap.get(7)
+            skipped = 0
             
             # extract frames from vid_clips
             vid_clips = sorted(list(vid_clips))
@@ -55,6 +56,7 @@ def download(args, queue_videos, videos):
                 f_end = int(fps * (word_start + args.vid_end)) + 96
                 if f_start < 0 or f_end > frame_count - 1:
                     done.put(1)
+                    skipped += 1
                     continue
                 indices = np.linspace(f_start + 32, f_end - 96, num=args.n_frames)
                 indices = np.array(list(map(round, indices)))
@@ -62,7 +64,11 @@ def download(args, queue_videos, videos):
                     frames_dict[index] = None
                 clips_dict[word_start] = (f_start, f_end, indices)
 
+            # if skipped > 0:
+            #     print(f"skipped {skipped} clips")
             frames_keys = list(frames_dict.keys())
+            if len(frames_keys) == 0:
+                continue
             min_frame, max_frame = min(frames_keys), max(frames_keys)
             for i in range(0, max_frame + 1):
                 if i in frames_dict:
@@ -92,6 +98,7 @@ def extract(args, queue_videos, queue_features, lock, rank):
                 agent.reset()
                 f_start, f_end, indices = clips_dict[word_start]
                 for i in range(f_start, f_end, 64):
+                    agent.reset()
                     low, high = i, i + 128
                     if high > f_end:
                         break
@@ -115,11 +122,20 @@ def upload(args, queue_features, done, lock):
     while True:
         try:
             [name, output] = queue_features.get()
-            client.save_nbz(f"{args.output_path}{name}{args.feats_suffix}", output)
+            client.save_nbz(f"{args.output_path}{name}{args.feats_suffix}", output.cpu().numpy())
             done.put(1)
         except Exception:
             print(traceback.format_exc())
             print(sys.exc_info()[2])
+
+def update(current_to_process, done):
+    """Update tqdm bar"""
+    pbar = tqdm(total=current_to_process)
+    processed_cnt = 0
+    while processed_cnt < current_to_process:
+        n = done.get()
+        pbar.update(n)
+        processed_cnt += n
 
 
 if __name__ == '__main__':
@@ -148,6 +164,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
     print(args)
     print(f"total cpu counts: {mp.cpu_count()}")
+    mp.set_start_method('spawn', force = True)
 
     with open(args.video_index_file) as f:
         video_indices = json.load(f)
@@ -186,12 +203,11 @@ if __name__ == '__main__':
     print(f"rank: {args.rank + 1}/{args.world_size}, current clips to process: {current_to_process}")
 
     # Extract IDM features
-    pbar = tqdm(total=current_to_process)
     lock = Lock()
     queue_videos, queue_features, done = Queue(1024), Queue(1024), Queue(1024)
     downloaders, extractors, uploaders = [], [], []
     for n in range(args.n_downloader):
-        downloaders.append(Process(target=download, args=(args, queue_videos, [x for x in inputs[n::args.n_downloader]])))
+        downloaders.append(Process(target=download, args=(args, queue_videos, done, [x for x in inputs[n::args.n_downloader]])))
     for n in range(args.n_extractor):
         p = Process(target=extract, args=(args, queue_videos, queue_features, lock, n))
         p.daemon = True
@@ -201,21 +217,17 @@ if __name__ == '__main__':
         p.daemon = True
         uploaders.append(p)
 
-    for p in downloaders:
-        p.start()
+    p0 = Process(target=update, args=(current_to_process, done)).start()
     for c in extractors:
         c.start()
     for c in uploaders:
         c.start()
+    for p in downloaders:
+        p.start()
 
-    processed_cnt = 0
-    while processed_cnt < current_to_process:
-        n = done.get()
-        pbar.update(n)
-        processed_cnt += n
+    print("all prcoesses started")
 
     for p in downloaders:
         p.join()
 
-
-    print("processed video clips", sum(processed_cnt))
+    print("processed video clips", sum([current_to_process]))
