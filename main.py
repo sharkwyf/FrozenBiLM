@@ -15,7 +15,7 @@ from torch.utils.data import DataLoader, DistributedSampler
 from collections import namedtuple
 
 from datasets import build_videotext_dataset, videotext_collate_fn, build_minedojo_videotext_dataset
-from model import build_model, get_tokenizer
+from model import build_model, get_tokenizer, InputFusionWrapperModel
 from util.misc import get_mask, mask_tokens, adjust_learning_rate
 from util import dist
 from util.metrics import MetricLogger
@@ -44,6 +44,7 @@ def train_one_epoch(
     ):
         video = batch_dict["video"].to(device)
         video_len = batch_dict["video_len"]
+        idm_feats = batch_dict["idm_feats"].to(device) if args.use_idm_features else None
         video_mask = get_mask(video_len, video.size(1)).to(device)
         if "minedojo" in args.combine_datasets:
             inputs, labels = batch_dict["inputs"].to(device), batch_dict["labels"].to(device)
@@ -68,6 +69,7 @@ def train_one_epoch(
         output = model(
             video=video,
             video_mask=video_mask,
+            idm_feats=idm_feats,
             input_ids=inputs,
             attention_mask=attention_mask,
             labels=labels,
@@ -123,6 +125,7 @@ def evaluate(
         video = batch_dict["video"].to(device)
         video_len = batch_dict["video_len"]
         video_mask = get_mask(video_len, video.size(1)).to(device)
+        idm_feats = batch_dict["idm_feats"].to(device) if args.use_idm_features else None
         if args.minedojo_mask_probs:
             inputs, labels = batch_dict["inputs"].to(device), batch_dict["labels"].to(device)
             attention_mask=batch_dict["attention_mask"].to(device)
@@ -146,6 +149,7 @@ def evaluate(
         output = model(
             video=video,
             video_mask=video_mask,
+            idm_feats=idm_feats,
             input_ids=inputs,
             attention_mask=attention_mask,
             labels=labels,
@@ -185,6 +189,7 @@ def main(args):
     
     # Build model
     model = build_model(args)
+    model = InputFusionWrapperModel(args, model)
     model.to(device)
     tokenizer = get_tokenizer(args)
     n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
@@ -298,7 +303,10 @@ def main(args):
         if dist.is_main_process():
             print("loading from", args.load)
         checkpoint = torch.load(args.load, map_location="cpu")
-        model.load_state_dict(checkpoint["model"], strict=False)
+        if args.load_inner_model:
+            model.model.load_state_dict(checkpoint["model"], strict=False)
+        else:
+            model.load_state_dict(checkpoint["model"], strict=False)
         if args.resume and not args.eval:
             optimizer.load_state_dict(checkpoint["optimizer"])
             args.start_epoch = checkpoint["epoch"] + 1

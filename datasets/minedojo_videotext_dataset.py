@@ -12,7 +12,7 @@ from util.verb_noun import ALL_NOUNS, ALL_VERBS
 
 
 class Minedojo_VideoText_Dataset(Dataset):
-    def __init__(self, tokenizer, features_path, *, max_feats=16, features_dim=768,
+    def __init__(self, tokenizer, features_path, idm_features_path, *, max_feats=16, features_dim=768, use_idm_features=False, idm_features_dim=4096,
         text_min_range=None, text_max_range=[], vid_min_range=None, vid_max_range=[], 
         n_process=8, mask_noun_prob=0.15, mask_verb_prob=0.15):
         # with open(video_index_file) as f:
@@ -20,16 +20,32 @@ class Minedojo_VideoText_Dataset(Dataset):
         self._tokenizer = tokenizer
         self._clients = init_clients(n_process)
         self._available_clt_indices = Queue(len(self._clients))
+        self._use_idm_features = use_idm_features
         for i in range(len(self._clients)):
             self._available_clt_indices.put(i)
         
-        print(f"fetching data indices from {features_path}")
+        print(f"fetching feature indices from {features_path}")
         self.data = sorted(list(self._clients[0].list(features_path)))
         print(f"fetched {len(self.data)} indices")
+        
+        if self._use_idm_features:
+            # load idm features
+            print(f"fetching idm feature indices from {idm_features_path}")
+            self.idm_data = sorted(list(self._clients[0].list(idm_features_path)))
+            print(f"fetched {len(self.idm_data)} indices")
+
+            # filter data with idm features
+            print(f"filtering, with idm features")
+            idms_set = set([x[:-4] for x in self.idm_data])
+            self.data = sorted([x for x in self.data if x[:-4] in idms_set])
+            print(f"got {len(self.data)} indices")
 
         self._features_path = features_path
+        self._idm_features_path = idm_features_path
         self._max_feats = max_feats
         self._features_dim = features_dim
+        self._idm_features_dim = idm_features_dim
+        self._output_features_dim = self._features_dim + self._use_idm_features * self._idm_features_dim
         self._text_min_range = text_min_range
         self._text_max_range = text_max_range
         self._vid_min_range = vid_min_range
@@ -49,7 +65,10 @@ class Minedojo_VideoText_Dataset(Dataset):
 
     def __getitem__(self, idx):
         clt_idx = self._available_clt_indices.get()
-        data = self._clients[clt_idx].load_npz(f"{self._features_path}{self.data[idx]}").item()
+        clip_id = self.data[idx][:-4]
+        data = self._clients[clt_idx].load_npz(f"{self._features_path}{clip_id}.npz").item()
+        if self._use_idm_features:
+            idm = self._clients[clt_idx].load_nbz(f"{self._idm_features_path}{clip_id}.nbz")
         self._available_clt_indices.put(clt_idx)
         frames, words, starts, lens = data["feats"], data["words"], data["starts"], data["lens"]
 
@@ -73,33 +92,46 @@ class Minedojo_VideoText_Dataset(Dataset):
         # process videos
         try:
             video = th.from_numpy(frames).float()
+            if self._use_idm_features:
+                idm_feats = th.from_numpy(idm).float()
+                assert len(video) == len(idm_feats)
             start_idx, end_idx = int((sample_vid_start + 8) * 4), int((sample_vid_end + 8) * 4)
             if len(video) > self._max_feats:
-                sampled = []
                 indices = sorted(np.random.choice(end_idx - start_idx - 2, self._max_feats - 2, replace=False) + start_idx + 1)
                 indices = [start_idx] + indices + [end_idx]
-                for j in indices:
-                    sampled.append(video[j])
-                video = th.stack(sampled)
+                video = video[indices]
                 video_len = self._max_feats
+                if self._use_idm_features:
+                    idm_feats = idm_feats[indices]
             elif len(video) < self._max_feats:
                 video_len = len(video)
                 video = th.cat(
                     [video, th.zeros(self._max_feats - video_len, self._features_dim)], 0
                 )
+                if self._use_idm_features:
+                    idm_feats = th.cat(
+                        [idm_feats, th.zeros(self._max_feats - video_len, self._idm_features_dim)], 0
+                    )
             else:
                 video_len = self._max_feats
         except:  # missing video or corrupted feature file
             video = th.zeros(self._max_feats, self._features_dim)
             video_len = 0
+            idm_feats = th.zeros(self._max_feats, self._idm_features_dim)
 
-        return {"video": video, "video_len": video_len, "words": words[masked]}
+        return {
+            "video": video,
+            "video_len": video_len,
+            "idm_feats": idm_feats if self._use_idm_features else None,
+            "words": words[masked]
+        }
 
 
     def minedojo_videotext_collate_fn(self, args, batch):
         bs = len(batch)
         video = th.stack([batch[i]["video"] for i in range(bs)])
         video_len = th.tensor([batch[i]["video_len"] for i in range(bs)], dtype=th.long)
+        idm_feats = th.stack([batch[i]["idm_feats"] for i in range(bs)])
         texts = [" ".join(batch[i]["words"]) for i in range(bs)]
 
         encoded = self._tokenizer(
@@ -120,6 +152,7 @@ class Minedojo_VideoText_Dataset(Dataset):
         return {
             "video": video,
             "video_len": video_len,
+            "idm_feats": idm_feats,
             "inputs": inputs,
             "labels": labels,
             "attention_mask": encoded["attention_mask"]
@@ -130,6 +163,8 @@ def build_minedojo_videotext_dataset(args, tokenizer):
     full_dataset = Minedojo_VideoText_Dataset(
         tokenizer=tokenizer,
         features_path=args.minedojo_features_path,
+        idm_features_path=args.minedojo_idm_features_path,
+        use_idm_features=args.use_idm_features,
         max_feats=args.max_feats,
         features_dim=args.features_dim,
         text_min_range=args.minedojo_text_min_range,

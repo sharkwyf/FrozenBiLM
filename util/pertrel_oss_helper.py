@@ -58,7 +58,7 @@ class PetrelClient(Client):
         import numpy
         from io import BytesIO
         stream = bz2.decompress(self.get(url))
-        return numpy.load(BytesIO(stream))
+        return numpy.load(BytesIO(stream), allow_pickle=True)
         
     def save_nbz(self, url: str, content):
         import bz2

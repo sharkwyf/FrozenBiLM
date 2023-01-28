@@ -25,12 +25,26 @@ def get_args_parser():
     
     # Minedojo
     parser.add_argument(
+        "--use_idm_features",
+        default=True,
+        type=bool,
+    )
+    parser.add_argument(
+        "--load_inner_model",
+        default=True,
+        type=bool,
+    )
+    parser.add_argument(
         "--video_index_file",
         default=os.path.join(DATA_DIR, name2folder["minedojo"], "minedojo_clips.json"),
     )
     parser.add_argument(
         "--minedojo_features_path",
         default="s3://minedojo/feats/v1/",
+    )
+    parser.add_argument(
+        "--minedojo_idm_features_path",
+        default="s3://minedojo/idms/v1/",
     )
     parser.add_argument(
         "--minedojo_text_min_range",
@@ -468,6 +482,12 @@ def get_args_parser():
         type=int,
         default=768,
         help="dimension of the visual embedding space",
+    )
+    parser.add_argument(
+        "--idm_features_dim",
+        type=int,
+        default=4096,
+        help="dimension of the idm embedding space",
     )
     parser.add_argument(
         "--no_video",
